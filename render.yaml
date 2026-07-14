@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: question-generator-api
+    runtime: python
+    buildCommand: pip install uv && uv sync
+    startCommand: .venv/bin/uvicorn main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: MYSQL_HOST
+        sync: false          # set manually in Render dashboard
+      - key: MYSQL_PORT
+        value: "3306"
+      - key: MYSQL_USER
+        sync: false
+      - key: MYSQL_PASSWORD
+        sync: false
+      - key: MYSQL_DATABASE
+        sync: false
+      - key: APP_ENV
+        value: production
+      - key: DEBUG
+        value: "false"
