@@ -6,6 +6,7 @@ This acts as the Controller (C) layer in MVC.
 from sqlalchemy.orm import Session, joinedload
 
 from app.models.question import Question
+from app.models.question_option import QuestionOption
 from app.schemas.question import QuestionCreate, QuestionResponse
 
 
@@ -24,15 +25,28 @@ class QuestionController:
 
     @staticmethod
     def create_question(data: QuestionCreate, db: Session) -> QuestionResponse:
-        """Insert a new question into the database and return it."""
+        """Insert a question and its options in one transaction."""
         question = Question(
             question=data.question,
+            is_global=data.is_global,
+            marks=data.marks,
             is_active=data.is_active,
+            options=[
+                QuestionOption(
+                    ans=option.ans,
+                    is_correct=option.is_correct,
+                )
+                for option in data.options
+            ],
         )
-        db.add(question)
-        db.commit()
-        # Reload with options eagerly so the response includes them (empty on create)
-        db.refresh(question)
+
+        try:
+            db.add(question)
+            db.commit()
+        except Exception:
+            db.rollback()
+            raise
+
         question = (
             db.query(Question)
             .options(joinedload(Question.options))
@@ -63,3 +77,23 @@ class QuestionController:
         if not question:
             return None
         return QuestionResponse.model_validate(question)
+
+    @staticmethod
+    def delete_question(question_id: int, db: Session) -> bool:
+        """Delete a question and its related options."""
+        question = (
+            db.query(Question)
+            .filter(Question.id == question_id)
+            .first()
+        )
+        if question is None:
+            return False
+
+        try:
+            db.delete(question)
+            db.commit()
+        except Exception:
+            db.rollback()
+            raise
+
+        return True

@@ -49,3 +49,18 @@ def get_question(
     if result is None:
         raise HTTPException(status_code=404, detail="Question not found")
     return result
+
+
+@router.delete(
+    "/{question_id}",
+    summary="Delete a question",
+    description="Delete a question and all of its options.",
+)
+def delete_question(
+    question_id: int,
+    db: Session = Depends(get_db),
+) -> dict[str, str]:
+    deleted = QuestionController.delete_question(question_id, db)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Question not found")
+    return {"detail": "Question deleted"}
