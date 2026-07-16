@@ -89,6 +89,28 @@ class StudentTestController:
         if not series.is_active or StudentTestController._as_utc(series.valid_until) <= now:
             raise StudentTestPermissionError("Test series is inactive or expired")
 
+        # ── Check for an existing attempt for this series ──────────────────────
+        existing = (
+            db.query(TestAttempt)
+            .filter(
+                TestAttempt.series_id == series.id,
+                TestAttempt.user_id == user_id,
+            )
+            .order_by(TestAttempt.id.desc())
+            .first()
+        )
+        if existing is not None:
+            # Auto-expire if time ran out
+            StudentTestController._mark_expired(existing, db)
+            if existing.status == "in_progress":
+                # Resume the existing attempt
+                return StudentTestController.get_attempt(existing.id, user_id, user_role, db)
+            # Already submitted or expired — do not allow a second attempt
+            raise StudentTestValidationError(
+                "You have already completed this test. Check your results in Attempt History."
+            )
+        # ── No existing attempt — create one ───────────────────────────────────
+
         question_ids = [entry.question_id for entry in series.series_questions]
         questions = {
             item.id: item
@@ -169,7 +191,9 @@ class StudentTestController:
             attempt_id, user_id, user_role, db
         )
         if attempt.status != "in_progress":
-            raise StudentTestValidationError("Attempt has already finished")
+            raise StudentTestValidationError(
+                "This attempt has already been submitted or has expired."
+            )
         now = datetime.now(timezone.utc)
         score = Decimal("0")
         for question in attempt.questions:
