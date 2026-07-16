@@ -1,26 +1,15 @@
 """Business logic for user CRUD operations."""
 
-import hashlib
-import secrets
-
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.models.user import User
 from app.schemas.user import UserCreate, UserResponse, UserUpdate
+from app.services.auth_service import hash_password
 
 
 class UserEmailExistsError(Exception):
     """Raised when a user email conflicts with an existing row."""
-
-
-def _hash_password(password: str) -> str:
-    """Hash a password with a random salt using PBKDF2-SHA256."""
-    salt = secrets.token_hex(16)
-    digest = hashlib.pbkdf2_hmac(
-        "sha256", password.encode(), bytes.fromhex(salt), 600_000
-    ).hex()
-    return f"pbkdf2_sha256$600000${salt}${digest}"
 
 
 class UserController:
@@ -32,7 +21,7 @@ class UserController:
             role=data.role,
             name=data.name.strip(),
             email=data.email.strip().lower(),
-            password=_hash_password(data.password),
+            password=hash_password(data.password),
         )
         try:
             db.add(user)
@@ -70,7 +59,7 @@ class UserController:
         if "email" in changes:
             changes["email"] = changes["email"].strip().lower()
         if "password" in changes:
-            changes["password"] = _hash_password(changes["password"])
+            changes["password"] = hash_password(changes["password"])
 
         for field, value in changes.items():
             setattr(user, field, value)

@@ -4,6 +4,7 @@ import base64
 import hashlib
 import hmac
 import json
+import secrets
 import time
 from typing import Any
 
@@ -12,6 +13,15 @@ from app.config import settings
 
 class InvalidTokenError(Exception):
     """Raised when an access token is invalid or expired."""
+
+
+def hash_password(password: str) -> str:
+    """Hash a password with a random salt using PBKDF2-SHA256."""
+    salt = secrets.token_hex(16)
+    digest = hashlib.pbkdf2_hmac(
+        "sha256", password.encode(), bytes.fromhex(salt), 600_000
+    ).hex()
+    return f"pbkdf2_sha256$600000${salt}${digest}"
 
 
 def verify_password(password: str, encoded_password: str) -> bool:

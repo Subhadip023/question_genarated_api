@@ -10,9 +10,13 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from app.middleware.auth_middleware import AuthMiddleware
+from app.middleware.organization_permission_middleware import (
+    OrganizationPermissionMiddleware,
+)
 from app.routes import (
     auth_routes,
     health_routes,
+    organization_routes,
     question_option_routes,
     question_routes,
     user_routes,
@@ -31,6 +35,9 @@ app = FastAPI(
     version="0.1.0",
 )
 
+# Starlette executes the last registered middleware first. Authentication must
+# populate request.state before organization permissions are checked.
+app.add_middleware(OrganizationPermissionMiddleware)
 app.add_middleware(AuthMiddleware)
 
 
@@ -51,6 +58,7 @@ app.include_router(question_routes.router)
 app.include_router(question_option_routes.router)
 app.include_router(user_routes.router)
 app.include_router(auth_routes.router)
+app.include_router(organization_routes.router)
 
 
 if __name__ == "__main__":
