@@ -67,3 +67,16 @@ def get_organization(
     if organization is None:
         raise HTTPException(status_code=404, detail="Organization not found")
     return organization
+
+
+@router.delete(
+    "/{organization_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Delete an organization (superadmin only)",
+)
+def delete_organization(
+    organization_id: int,
+    db: Session = Depends(get_db),
+) -> None:
+    if not OrganizationController.delete_organization(organization_id, db):
+        raise HTTPException(status_code=404, detail="Organization not found")

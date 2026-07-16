@@ -9,7 +9,7 @@ from app.models.organization_user import OrganizationUser
 
 
 class OrganizationPermissionMiddleware(BaseHTTPMiddleware):
-    """Allow only superadmins to create organizations."""
+    """Enforce role and membership rules for organization mutations."""
 
     async def dispatch(self, request: Request, call_next):
         path = request.url.path.rstrip("/") or "/"
@@ -36,11 +36,22 @@ class OrganizationPermissionMiddleware(BaseHTTPMiddleware):
                         "detail": "Only this organization's admin can update it"
                     },
                 )
+        if request.method == "DELETE" and path.startswith("/organizations/"):
+            if not self.can_delete(getattr(request.state, "user_role", None)):
+                return JSONResponse(
+                    status_code=403,
+                    content={"detail": "Only a superadmin can delete an organization"},
+                )
         return await call_next(request)
 
     @staticmethod
     def can_create(role: int | None) -> bool:
         """Return whether a role may create an organization."""
+        return role == 0
+
+    @staticmethod
+    def can_delete(role: int | None) -> bool:
+        """Return whether a role may permanently delete an organization."""
         return role == 0
 
     @staticmethod

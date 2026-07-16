@@ -1,5 +1,7 @@
 """Business logic for organizations."""
 
+import secrets
+
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -29,6 +31,9 @@ class OrganizationController:
     ) -> OrganizationCreateResponse:
         organization = Organization(
             name=data.name.strip(),
+            code=OrganizationController._generate_unique_code(db),
+            location=data.location.strip() if data.location else None,
+            phone_number=data.phone_number.strip() if data.phone_number else None,
             is_active=data.is_active,
         )
         admin = User(
@@ -57,6 +62,16 @@ class OrganizationController:
         )
 
     @staticmethod
+    def _generate_unique_code(db: Session) -> str:
+        """Generate an unused six-digit organization code."""
+        for _ in range(100):
+            code = str(secrets.randbelow(900000) + 100000)
+            exists = db.query(Organization.id).filter(Organization.code == code).first()
+            if exists is None:
+                return code
+        raise RuntimeError("Unable to generate a unique organization code")
+
+    @staticmethod
     def get_all_organizations(db: Session) -> list[OrganizationResponse]:
         organizations = db.query(Organization).order_by(Organization.id).all()
         return [OrganizationResponse.model_validate(item) for item in organizations]
@@ -75,6 +90,14 @@ class OrganizationController:
 
         if data.name is not None:
             organization.name = data.name.strip()
+        if "location" in data.model_fields_set:
+            organization.location = data.location.strip() if data.location else None
+        if "phone_number" in data.model_fields_set:
+            organization.phone_number = (
+                data.phone_number.strip() if data.phone_number else None
+            )
+        if data.is_active is not None:
+            organization.is_active = data.is_active
 
         try:
             db.commit()
@@ -94,3 +117,22 @@ class OrganizationController:
             .first()
         )
         return OrganizationResponse.model_validate(organization) if organization else None
+
+    @staticmethod
+    def delete_organization(organization_id: int, db: Session) -> bool:
+        """Delete an organization; membership rows cascade at database level."""
+        organization = (
+            db.query(Organization)
+            .filter(Organization.id == organization_id)
+            .first()
+        )
+        if organization is None:
+            return False
+
+        try:
+            db.delete(organization)
+            db.commit()
+        except Exception:
+            db.rollback()
+            raise
+        return True
