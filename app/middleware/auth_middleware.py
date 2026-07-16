@@ -12,7 +12,7 @@ from app.services.auth_service import InvalidTokenError, decode_access_token
 class AuthMiddleware(BaseHTTPMiddleware):
     """Require a valid bearer token for non-public API routes."""
 
-    PUBLIC_PATHS = {"/", "/health", "/auth/login", "/openapi.json"}
+    PUBLIC_PATHS = {"/", "/health", "/auth/login", "/auth/register", "/openapi.json"}
     PUBLIC_PREFIXES = ("/docs", "/redoc")
 
     async def dispatch(self, request: Request, call_next):

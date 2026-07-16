@@ -16,6 +16,9 @@ import app.models.question_option  # noqa: F401
 import app.models.user  # noqa: F401
 import app.models.organization  # noqa: F401
 import app.models.organization_user  # noqa: F401
+import app.models.test_series  # noqa: F401
+import app.models.series_question  # noqa: F401
+import app.models.test_attempt  # noqa: F401
 
 # Alembic Config object
 config = context.config

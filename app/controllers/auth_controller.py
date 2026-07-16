@@ -1,19 +1,41 @@
 """Authentication controller."""
 
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
 
 from app.models.organization import Organization
 from app.models.organization_user import OrganizationUser
 from app.models.user import User
-from app.schemas.user import LoginRequest, TokenResponse, UserResponse
-from app.services.auth_service import create_access_token, verify_password
+from app.schemas.user import LoginRequest, StudentRegister, TokenResponse, UserResponse
+from app.services.auth_service import create_access_token, hash_password, verify_password
 
 
 class InvalidCredentialsError(Exception):
     """Raised when login credentials are incorrect."""
 
 
+class EmailAlreadyExistsError(Exception):
+    """Raised when a registration email is already used."""
+
+
 class AuthController:
+    @staticmethod
+    def register_student(data: StudentRegister, db: Session) -> UserResponse:
+        student = User(
+            role=3,
+            name=data.name.strip(),
+            email=data.email.strip().lower(),
+            password=hash_password(data.password),
+        )
+        try:
+            db.add(student)
+            db.commit()
+            db.refresh(student)
+        except IntegrityError as exc:
+            db.rollback()
+            raise EmailAlreadyExistsError from exc
+        return UserResponse.model_validate(student)
+
     @staticmethod
     def login(data: LoginRequest, db: Session) -> TokenResponse:
         user = (

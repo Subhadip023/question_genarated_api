@@ -49,6 +49,14 @@ class LoginRequest(BaseModel):
     password: str = Field(..., min_length=8, max_length=255)
 
 
+class StudentRegister(BaseModel):
+    """Public registration payload; role is always assigned as student (3)."""
+
+    name: str = Field(..., min_length=1, max_length=255)
+    email: str = Field(..., min_length=3, max_length=255)
+    password: str = Field(..., min_length=8, max_length=255)
+
+
 class TokenResponse(BaseModel):
     """Bearer token returned after successful authentication."""
 
