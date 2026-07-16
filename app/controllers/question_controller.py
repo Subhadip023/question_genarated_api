@@ -3,6 +3,7 @@ Question controller — handles request orchestration between route and model.
 This acts as the Controller (C) layer in MVC.
 """
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
 from app.models.question import Question
@@ -83,27 +84,57 @@ class QuestionController:
         return QuestionResponse.model_validate(question)
 
     @staticmethod
-    def get_all_questions(db: Session) -> list[QuestionResponse]:
-        """Fetch all questions with their options in a single query."""
-        questions = (
-            db.query(Question)
-            .options(joinedload(Question.options))
-            .all()
+    def get_all_questions(
+        user_id: int,
+        user_role: int,
+        db: Session,
+    ) -> list[QuestionResponse]:
+        """Fetch only questions visible to the authenticated user."""
+        query = db.query(Question).options(joinedload(Question.options))
+        query = QuestionController._apply_visibility_filter(
+            query, user_id, user_role, db
         )
+        questions = query.all()
         return [QuestionResponse.model_validate(q) for q in questions]
 
     @staticmethod
-    def get_question(question_id: int, db: Session) -> QuestionResponse | None:
-        """Fetch a single question by ID, including its options."""
-        question = (
+    def get_question(
+        question_id: int,
+        user_id: int,
+        user_role: int,
+        db: Session,
+    ) -> QuestionResponse | None:
+        """Fetch a question only when it is visible to the authenticated user."""
+        query = (
             db.query(Question)
             .options(joinedload(Question.options))
             .filter(Question.id == question_id)
-            .first()
         )
+        query = QuestionController._apply_visibility_filter(
+            query, user_id, user_role, db
+        )
+        question = query.first()
         if not question:
             return None
         return QuestionResponse.model_validate(question)
+
+    @staticmethod
+    def _apply_visibility_filter(query, user_id: int, user_role: int, db: Session):
+        """Apply role-based question visibility to a SQLAlchemy query."""
+        if user_role == 0:
+            return query.filter(Question.is_global.is_(True))
+
+        if user_role == 1:
+            organization_ids = (
+                select(OrganizationUser.org_id)
+                .filter(OrganizationUser.user_id == user_id)
+            )
+            return query.filter(Question.organization_id.in_(organization_ids))
+
+        if user_role == 2:
+            return query.filter(Question.user_id == user_id)
+
+        return query.filter(False)
 
     @staticmethod
     def update_question(

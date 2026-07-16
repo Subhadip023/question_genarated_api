@@ -47,8 +47,15 @@ def create_question(
     response_model=list[QuestionResponse],
     summary="List all questions",
 )
-def list_questions(db: Session = Depends(get_db)) -> list[QuestionResponse]:
-    return QuestionController.get_all_questions(db)
+def list_questions(
+    request: Request,
+    db: Session = Depends(get_db),
+) -> list[QuestionResponse]:
+    return QuestionController.get_all_questions(
+        user_id=request.state.user_id,
+        user_role=request.state.user_role,
+        db=db,
+    )
 
 
 @router.get(
@@ -58,9 +65,15 @@ def list_questions(db: Session = Depends(get_db)) -> list[QuestionResponse]:
 )
 def get_question(
     question_id: int,
+    request: Request,
     db: Session = Depends(get_db),
 ) -> QuestionResponse:
-    result = QuestionController.get_question(question_id, db)
+    result = QuestionController.get_question(
+        question_id,
+        user_id=request.state.user_id,
+        user_role=request.state.user_role,
+        db=db,
+    )
     if result is None:
         raise HTTPException(status_code=404, detail="Question not found")
     return result
