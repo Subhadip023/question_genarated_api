@@ -56,4 +56,7 @@ class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
     expires_in: int
+    organization_id: int | None
+    organization_name: str | None
+    user_role: int
     user: UserResponse
