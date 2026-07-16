@@ -21,6 +21,8 @@ class Question(Base):
 
     # Long text field — stores HTML content
     question: Mapped[str] = mapped_column(Text, nullable=False)
+    organization_id: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    user_id: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     is_global: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     marks: Mapped[Decimal] = mapped_column(Numeric(10, 2), default=Decimal("1.00"), nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)

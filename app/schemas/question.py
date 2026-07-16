@@ -16,10 +16,24 @@ class QuestionCreate(BaseModel):
     )
 
 
+class QuestionUpdate(BaseModel):
+    """Schema for partially updating a question."""
+    question: str | None = Field(None, description="HTML content of the question")
+    is_global: bool | None = Field(None, description="Whether the question is global")
+    marks: Decimal | None = Field(None, description="Marks for the question")
+    is_active: bool | None = Field(None, description="Whether the question is active")
+    options: list[OptionCreate] | None = Field(
+        None,
+        description="Replacement options for the question",
+    )
+
+
 class QuestionResponse(BaseModel):
     """Schema for returning a question with its options."""
     id: int
     question: str
+    organization_id: int
+    user_id: int
     is_global: bool
     marks: Decimal
     is_active: bool

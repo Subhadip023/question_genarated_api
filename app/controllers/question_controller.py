@@ -7,7 +7,12 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.models.question import Question
 from app.models.question_option import QuestionOption
-from app.schemas.question import QuestionCreate, QuestionResponse
+from app.models.organization_user import OrganizationUser
+from app.schemas.question import QuestionCreate, QuestionResponse, QuestionUpdate
+
+
+class QuestionCreatorHasNoOrganizationError(Exception):
+    """Raised when a non-superadmin has no organization membership."""
 
 
 class QuestionController:
@@ -24,11 +29,33 @@ class QuestionController:
         return {"message": "Welcome to the Question Generator API"}
 
     @staticmethod
-    def create_question(data: QuestionCreate, db: Session) -> QuestionResponse:
+    def create_question(
+        data: QuestionCreate,
+        user_id: int,
+        user_role: int,
+        db: Session,
+    ) -> QuestionResponse:
         """Insert a question and its options in one transaction."""
+        if user_role == 0:
+            organization_id = 0
+            is_global = True
+        else:
+            membership = (
+                db.query(OrganizationUser)
+                .filter(OrganizationUser.user_id == user_id)
+                .order_by(OrganizationUser.org_id)
+                .first()
+            )
+            if membership is None:
+                raise QuestionCreatorHasNoOrganizationError
+            organization_id = membership.org_id
+            is_global = False
+
         question = Question(
             question=data.question,
-            is_global=data.is_global,
+            organization_id=organization_id,
+            user_id=user_id,
+            is_global=is_global,
             marks=data.marks,
             is_active=data.is_active,
             options=[
@@ -76,6 +103,46 @@ class QuestionController:
         )
         if not question:
             return None
+        return QuestionResponse.model_validate(question)
+
+    @staticmethod
+    def update_question(
+        question_id: int,
+        data: QuestionUpdate,
+        db: Session,
+    ) -> QuestionResponse | None:
+        """Partially update a question and optionally replace all its options."""
+        question = (
+            db.query(Question)
+            .options(joinedload(Question.options))
+            .filter(Question.id == question_id)
+            .first()
+        )
+        if question is None:
+            return None
+
+        updates = data.model_dump(exclude_unset=True)
+        options = updates.pop("options", None)
+
+        for field, value in updates.items():
+            if value is not None:
+                setattr(question, field, value)
+
+        if options is not None:
+            question.options = [QuestionOption(**option) for option in options]
+
+        try:
+            db.commit()
+        except Exception:
+            db.rollback()
+            raise
+
+        question = (
+            db.query(Question)
+            .options(joinedload(Question.options))
+            .filter(Question.id == question_id)
+            .first()
+        )
         return QuestionResponse.model_validate(question)
 
     @staticmethod

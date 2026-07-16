@@ -3,12 +3,15 @@ Question routes — thin route definitions that delegate to the controller.
 This acts as the View/Route (V) layer in MVC.
 """
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
-from app.controllers.question_controller import QuestionController
+from app.controllers.question_controller import (
+    QuestionController,
+    QuestionCreatorHasNoOrganizationError,
+)
 from app.dependencies.db import get_db
-from app.schemas.question import QuestionCreate, QuestionResponse
+from app.schemas.question import QuestionCreate, QuestionResponse, QuestionUpdate
 
 router = APIRouter(prefix="/questions", tags=["Questions"])
 
@@ -22,9 +25,21 @@ router = APIRouter(prefix="/questions", tags=["Questions"])
 )
 def create_question(
     data: QuestionCreate,
+    request: Request,
     db: Session = Depends(get_db),
 ) -> QuestionResponse:
-    return QuestionController.create_question(data, db)
+    try:
+        return QuestionController.create_question(
+            data,
+            user_id=request.state.user_id,
+            user_role=request.state.user_role,
+            db=db,
+        )
+    except QuestionCreatorHasNoOrganizationError:
+        raise HTTPException(
+            status_code=403,
+            detail="User does not belong to an organization",
+        )
 
 
 @router.get(
@@ -46,6 +61,23 @@ def get_question(
     db: Session = Depends(get_db),
 ) -> QuestionResponse:
     result = QuestionController.get_question(question_id, db)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Question not found")
+    return result
+
+
+@router.patch(
+    "/{question_id}",
+    response_model=QuestionResponse,
+    summary="Edit a question",
+    description="Partially update a question. If options are supplied, they replace all existing options.",
+)
+def update_question(
+    question_id: int,
+    data: QuestionUpdate,
+    db: Session = Depends(get_db),
+) -> QuestionResponse:
+    result = QuestionController.update_question(question_id, data, db)
     if result is None:
         raise HTTPException(status_code=404, detail="Question not found")
     return result
