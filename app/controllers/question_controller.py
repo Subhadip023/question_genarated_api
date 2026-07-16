@@ -68,6 +68,7 @@ class QuestionController:
             is_global=is_global,
             marks=data.marks,
             is_active=data.is_active,
+            topic_id=data.topic_id,
             options=[
                 QuestionOption(
                     ans=option.ans,
@@ -86,7 +87,7 @@ class QuestionController:
 
         question = (
             db.query(Question)
-            .options(joinedload(Question.options))
+            .options(joinedload(Question.options), joinedload(Question.topic))
             .filter(Question.id == question.id)
             .first()
         )
@@ -111,6 +112,7 @@ class QuestionController:
                 is_global=is_global,
                 marks=item.marks,
                 is_active=item.is_active,
+                topic_id=item.topic_id,
                 options=[
                     QuestionOption(ans=option.ans, is_correct=option.is_correct)
                     for option in item.options
@@ -130,7 +132,7 @@ class QuestionController:
 
         created = (
             db.query(Question)
-            .options(joinedload(Question.options))
+            .options(joinedload(Question.options), joinedload(Question.topic))
             .filter(Question.id.in_(question_ids))
             .all()
         )
@@ -171,7 +173,7 @@ class QuestionController:
         db: Session,
     ) -> list[QuestionResponse]:
         """Fetch only questions visible to the authenticated user."""
-        query = db.query(Question).options(joinedload(Question.options))
+        query = db.query(Question).options(joinedload(Question.options), joinedload(Question.topic))
         query = QuestionController._apply_visibility_filter(
             query, user_id, user_role, db
         )
@@ -188,7 +190,7 @@ class QuestionController:
         """Fetch a question only when it is visible to the authenticated user."""
         query = (
             db.query(Question)
-            .options(joinedload(Question.options))
+            .options(joinedload(Question.options), joinedload(Question.topic))
             .filter(Question.id == question_id)
         )
         query = QuestionController._apply_visibility_filter(
@@ -226,7 +228,7 @@ class QuestionController:
         """Partially update a question and optionally replace all its options."""
         question = (
             db.query(Question)
-            .options(joinedload(Question.options))
+            .options(joinedload(Question.options), joinedload(Question.topic))
             .filter(Question.id == question_id)
             .first()
         )
@@ -251,7 +253,7 @@ class QuestionController:
 
         question = (
             db.query(Question)
-            .options(joinedload(Question.options))
+            .options(joinedload(Question.options), joinedload(Question.topic))
             .filter(Question.id == question_id)
             .first()
         )

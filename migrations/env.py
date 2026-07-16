@@ -12,6 +12,7 @@ from app.config import settings
 # Import Base and all models so Alembic can detect schema changes
 from app.database import Base
 import app.models.question  # noqa: F401
+import app.models.topic  # noqa: F401
 import app.models.question_option  # noqa: F401
 import app.models.user  # noqa: F401
 import app.models.organization  # noqa: F401

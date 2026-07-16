@@ -21,6 +21,7 @@ from app.routes import (
     question_routes,
     student_test_routes,
     test_series_routes,
+    topic_routes,
     user_routes,
 )
 
@@ -57,6 +58,7 @@ async def global_exception_handler(request: Request, exc: Exception):
 # Register routers
 app.include_router(health_routes.router)
 app.include_router(question_routes.router)
+app.include_router(topic_routes.router)
 app.include_router(question_option_routes.router)
 app.include_router(test_series_routes.router)
 app.include_router(student_test_routes.router)

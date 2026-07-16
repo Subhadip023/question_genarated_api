@@ -2,6 +2,7 @@ from pydantic import BaseModel, Field, model_validator
 from datetime import datetime
 from decimal import Decimal
 from app.schemas.question_option import OptionResponse, OptionCreate
+from app.schemas.topic import TopicResponse
 
 
 class QuestionCreate(BaseModel):
@@ -10,6 +11,7 @@ class QuestionCreate(BaseModel):
     is_global: bool = Field(True, description="Whether the question is global")
     marks: Decimal = Field(Decimal("1.00"), description="Marks for the question")
     is_active: bool = Field(True, description="Whether the question is active")
+    topic_id: int | None = Field(None, description="ID of the topic associated with the question")
     options: list[OptionCreate] = Field(
         default_factory=list,
         description="Options for the question",
@@ -38,6 +40,7 @@ class QuestionUpdate(BaseModel):
     is_global: bool | None = Field(None, description="Whether the question is global")
     marks: Decimal | None = Field(None, description="Marks for the question")
     is_active: bool | None = Field(None, description="Whether the question is active")
+    topic_id: int | None = Field(None, description="ID of the topic associated with the question")
     options: list[OptionCreate] | None = Field(
         None,
         description="Replacement options for the question",
@@ -55,6 +58,8 @@ class QuestionResponse(BaseModel):
     is_active: bool
     created_at: datetime
     updated_at: datetime
+    topic_id: int | None = None
+    topic: TopicResponse | None = None
     options: list[OptionResponse] = Field(default_factory=list)
 
     model_config = {"from_attributes": True}
