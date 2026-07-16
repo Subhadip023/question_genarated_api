@@ -40,9 +40,13 @@ class QuestionOptionController:
         return [OptionResponse.model_validate(o) for o in options]
 
     @staticmethod
-    def delete_option(option_id: int, db: Session) -> dict:
+    def delete_option(q_id: int, option_id: int, db: Session) -> dict:
         """Delete a single option by ID."""
-        option = db.query(QuestionOption).filter(QuestionOption.id == option_id).first()
+        option = (
+            db.query(QuestionOption)
+            .filter(QuestionOption.id == option_id, QuestionOption.q_id == q_id)
+            .first()
+        )
         if not option:
             raise HTTPException(status_code=404, detail="Option not found")
         db.delete(option)

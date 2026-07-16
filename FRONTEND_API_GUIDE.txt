@@ -1,0 +1,383 @@
+QUESTION MASTER API - FRONTEND INTEGRATION GUIDE
+================================================
+
+Replace API_BASE_URL with the deployed API URL, for example:
+https://your-api.example.com
+
+Interactive API documentation:
+API_BASE_URL/docs
+
+
+1. AUTHENTICATION
+=================
+
+All endpoints except registration, login, health, and API documentation require:
+
+Authorization: Bearer ACCESS_TOKEN
+Content-Type: application/json
+
+Roles:
+0 = Superadmin
+1 = Organization admin
+2 = Teacher
+3 = Student
+
+
+1.1 Student registration
+------------------------
+
+POST /auth/register
+
+Request:
+{
+  "name": "Student Name",
+  "email": "student@example.com",
+  "password": "password123"
+}
+
+The backend always creates this account with role 3. Do not send a role from
+the frontend.
+
+Possible responses:
+201 = Student created
+409 = Email already exists
+422 = Invalid input
+
+
+1.2 Login
+---------
+
+POST /auth/login
+
+Request:
+{
+  "email": "student@example.com",
+  "password": "password123"
+}
+
+Important response fields:
+{
+  "access_token": "...",
+  "token_type": "bearer",
+  "expires_in": 86400,
+  "organization_id": null,
+  "organization_name": null,
+  "user_role": 3,
+  "user": {
+    "id": 25,
+    "role": 3,
+    "name": "Student Name",
+    "email": "student@example.com"
+  }
+}
+
+Store access_token securely and send it with protected requests. On 401,
+clear the stored login state and send the user to the login page.
+
+
+2. TEST-SERIES MANAGEMENT (ROLES 0, 1, AND 2)
+================================================
+
+2.1 Create a public test series
+-------------------------------
+
+POST /test-series/
+
+Request:
+{
+  "name": "Public GK Test",
+  "access_type": "public",
+  "valid_until": "2026-07-20T23:59:59+05:30",
+  "duration_seconds": 1200,
+  "question_ids": [12, 8, 15],
+  "is_active": true
+}
+
+Public series response rules:
+- code is null
+- invite_token is null
+- Students discover it through GET /student/test-series
+- Students start it using its series id
+
+
+2.2 Create an invite-only test series
+--------------------------------------
+
+POST /test-series/
+
+Request:
+{
+  "name": "Private GK Test",
+  "access_type": "invite_only",
+  "valid_until": "2026-07-20T23:59:59+05:30",
+  "duration_seconds": 1200,
+  "question_ids": [12, 8, 15],
+  "is_active": true
+}
+
+Important creation response:
+{
+  "id": 10,
+  "code": null,
+  "invite_token": "K8mP2xV7qN4sR9cT6wY3aB1d...",
+  "access_type": "invite_only",
+  "name": "Private GK Test"
+}
+
+IMPORTANT:
+- The raw invite_token is returned only in the CREATE response.
+- Only its SHA-256 hash is stored by the backend.
+- Later list/get requests return invite_token as null.
+- The frontend must immediately show/copy/share the token or generated link.
+
+Suggested share link:
+https://your-frontend.example.com/join#token=INVITE_TOKEN
+
+Use #token instead of ?token. URL fragments are not sent automatically in
+HTTP requests, logs, or referrer headers.
+
+
+2.3 Test-series creator permissions
+-----------------------------------
+
+Role 0:
+- Creates global series with org_id 0
+- Can attach global questions
+
+Role 1:
+- Creates series for their organization
+- Can attach accessible organization questions
+
+Role 2:
+- Creates series for their organization
+- Can attach only questions created by that teacher
+
+Roles other than 0, 1, and 2 receive 403.
+
+
+2.4 List and get managed test series
+------------------------------------
+
+GET /test-series/
+GET /test-series/{series_id}
+
+These are management endpoints for authenticated creators. Invite tokens are
+never returned by these endpoints.
+
+
+3. STUDENT TEST FLOW (ROLE 3)
+=============================
+
+3.1 List available public tests
+-------------------------------
+
+GET /student/test-series
+
+Response example:
+[
+  {
+    "id": 4,
+    "name": "Public GK Test",
+    "org_id": 0,
+    "valid_until": "2026-07-20T18:29:59Z",
+    "duration_seconds": 1200,
+    "question_count": 20
+  }
+]
+
+Only active, unexpired public test series are returned. Invite-only tests are
+not shown in this list.
+
+
+3.2 Start a public test
+-----------------------
+
+POST /student/test-series/start
+
+Request:
+{
+  "series_id": 4
+}
+
+
+3.3 Start an invite-only test
+-----------------------------
+
+The frontend join page reads the token from window.location.hash. It should
+ask the student to log in and show a Start Test confirmation button. Opening
+the link must not automatically create an attempt.
+
+POST /student/test-series/start
+
+Request:
+{
+  "invite_token": "K8mP2xV7qN4sR9cT6wY3aB1d..."
+}
+
+Send either series_id or invite_token, never both.
+
+Possible responses:
+201 = A new attempt was created
+400 = Invalid token/test or invalid request
+403 = Wrong role, inactive series, or expired series
+401 = Not logged in
+
+
+3.4 Attempt response
+--------------------
+
+{
+  "id": 101,
+  "series_id": 4,
+  "series_name": "Public GK Test",
+  "started_at": "2026-07-19T10:00:00Z",
+  "expires_at": "2026-07-19T10:20:00Z",
+  "submitted_at": null,
+  "status": "in_progress",
+  "score": "0.00",
+  "total_marks": "20.00",
+  "questions": [
+    {
+      "id": 501,
+      "original_question_id": 12,
+      "position": 1,
+      "question": "Question HTML/text",
+      "marks": "1.00",
+      "options": [
+        {"id": 88, "ans": "Option A"},
+        {"id": 89, "ans": "Option B"}
+      ],
+      "selected_option_id": null
+    }
+  ]
+}
+
+Use attempt question id (501), not original_question_id (12), when saving an
+answer. Correct-answer information is intentionally never returned.
+
+The backend calculates expires_at as the earlier of:
+- started_at + duration_seconds
+- test-series valid_until
+
+
+3.5 Save or change an answer
+-----------------------------
+
+PUT /student/attempts/{attempt_id}/questions/{attempt_question_id}
+
+Example:
+PUT /student/attempts/101/questions/501
+
+Request:
+{
+  "selected_option_id": 89
+}
+
+The same endpoint can be called again to change the selected answer while the
+attempt is in progress. The full updated attempt is returned.
+
+
+3.6 Submit an attempt
+---------------------
+
+POST /student/attempts/{attempt_id}/submit
+
+No request body is required.
+
+The backend scores the snapshotted answers and returns status "submitted".
+After the timer ends, the attempt status becomes "expired" and answers can no
+longer be changed.
+
+
+3.7 Resume/view an attempt
+---------------------------
+
+GET /student/attempts/{attempt_id}
+
+Use this after a page refresh to reload the current attempt. Calculate the
+display countdown from expires_at, but always treat the backend as the final
+authority for expiration.
+
+
+3.8 Attempt history
+-------------------
+
+GET /student/attempt-history
+
+Response example:
+[
+  {
+    "id": 101,
+    "series_id": 4,
+    "series_name": "Public GK Test",
+    "started_at": "2026-07-19T10:00:00Z",
+    "expires_at": "2026-07-19T10:20:00Z",
+    "submitted_at": "2026-07-19T10:15:00Z",
+    "status": "submitted",
+    "score": "18.00",
+    "total_marks": "20.00"
+  }
+]
+
+Multiple attempts are allowed. Every start creates a separate attempt and all
+attempts remain in history.
+
+
+4. FRONTEND FETCH EXAMPLES
+==========================
+
+Protected request helper:
+
+async function apiFetch(path, options = {}) {
+  const token = localStorage.getItem("access_token");
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...options.headers,
+    },
+  });
+
+  const data = response.status === 204 ? null : await response.json();
+  if (!response.ok) {
+    throw new Error(data?.detail || "API request failed");
+  }
+  return data;
+}
+
+Read an invite token from the share link:
+
+const params = new URLSearchParams(window.location.hash.slice(1));
+const inviteToken = params.get("token");
+
+Start an invite-only test after login and user confirmation:
+
+const attempt = await apiFetch("/student/test-series/start", {
+  method: "POST",
+  body: JSON.stringify({ invite_token: inviteToken }),
+});
+
+
+5. IMPORTANT FRONTEND RULES
+===========================
+
+- Never send or calculate is_correct, marks_awarded, or score.
+- Never start an attempt automatically when a share link opens.
+- Require a confirmation button before POST /student/test-series/start.
+- Do not send both series_id and invite_token.
+- Save answers using attempt_question_id from the attempt response.
+- Disable answer controls when status is not "in_progress".
+- Use expires_at for the countdown; the backend enforces the real timer.
+- Handle 401, 400, 403, 409, and 422 responses and display detail.
+- Preserve the invite token only as long as needed to start the test.
+- The raw invite token cannot be recovered from the backend after creation.
+- Public tests do not have codes or invite tokens.
+
+
+6. LOCAL DEVELOPMENT NOTE
+==========================
+
+If the frontend runs on a different origin (for example localhost:3000 while
+the API runs on localhost:8000), the FastAPI application must allow that
+frontend origin through CORS before browser requests will work.

@@ -35,10 +35,10 @@ def create_question(
             user_role=request.state.user_role,
             db=db,
         )
-    except QuestionCreatorHasNoOrganizationError:
+    except QuestionCreatorHasNoOrganizationError as exc:
         raise HTTPException(
             status_code=403,
-            detail="User does not belong to an organization",
+            detail=str(exc) or "User does not belong to an organization",
         )
 
 
@@ -88,8 +88,16 @@ def get_question(
 def update_question(
     question_id: int,
     data: QuestionUpdate,
+    request: Request,
     db: Session = Depends(get_db),
 ) -> QuestionResponse:
+    if request.state.user_role not in (0, 1, 2):
+        raise HTTPException(status_code=403, detail="Students cannot update questions")
+    visible = QuestionController.get_question(
+        question_id, request.state.user_id, request.state.user_role, db
+    )
+    if visible is None:
+        raise HTTPException(status_code=404, detail="Question not found")
     result = QuestionController.update_question(question_id, data, db)
     if result is None:
         raise HTTPException(status_code=404, detail="Question not found")
@@ -103,8 +111,16 @@ def update_question(
 )
 def delete_question(
     question_id: int,
+    request: Request,
     db: Session = Depends(get_db),
 ) -> dict[str, str]:
+    if request.state.user_role not in (0, 1, 2):
+        raise HTTPException(status_code=403, detail="Students cannot delete questions")
+    visible = QuestionController.get_question(
+        question_id, request.state.user_id, request.state.user_role, db
+    )
+    if visible is None:
+        raise HTTPException(status_code=404, detail="Question not found")
     deleted = QuestionController.delete_question(question_id, db)
     if not deleted:
         raise HTTPException(status_code=404, detail="Question not found")

@@ -37,6 +37,10 @@ class QuestionController:
         db: Session,
     ) -> QuestionResponse:
         """Insert a question and its options in one transaction."""
+        if user_role not in (0, 1, 2):
+            raise QuestionCreatorHasNoOrganizationError(
+                "Only roles 0, 1, and 2 can create questions"
+            )
         if user_role == 0:
             organization_id = 0
             is_global = True
