@@ -9,7 +9,14 @@ import traceback
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
-from app.routes import health_routes, question_routes, question_option_routes
+from app.middleware.auth_middleware import AuthMiddleware
+from app.routes import (
+    auth_routes,
+    health_routes,
+    question_option_routes,
+    question_routes,
+    user_routes,
+)
 
 # Configure logging so errors print to console with full tracebacks
 logging.basicConfig(
@@ -23,6 +30,8 @@ app = FastAPI(
     description="A FastAPI application structured using MVC (Model-View-Controller).",
     version="0.1.0",
 )
+
+app.add_middleware(AuthMiddleware)
 
 
 @app.exception_handler(Exception)
@@ -40,6 +49,8 @@ async def global_exception_handler(request: Request, exc: Exception):
 app.include_router(health_routes.router)
 app.include_router(question_routes.router)
 app.include_router(question_option_routes.router)
+app.include_router(user_routes.router)
+app.include_router(auth_routes.router)
 
 
 if __name__ == "__main__":

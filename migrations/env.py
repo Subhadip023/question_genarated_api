@@ -13,6 +13,7 @@ from app.config import settings
 from app.database import Base
 import app.models.question  # noqa: F401
 import app.models.question_option  # noqa: F401
+import app.models.user  # noqa: F401
 
 # Alembic Config object
 config = context.config
