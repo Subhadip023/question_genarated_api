@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from datetime import datetime
 from decimal import Decimal
 from app.schemas.question_option import OptionResponse, OptionCreate
@@ -14,6 +14,22 @@ class QuestionCreate(BaseModel):
         default_factory=list,
         description="Options for the question",
     )
+
+
+class BulkQuestionCreate(QuestionCreate):
+    """One question in a bulk-create request."""
+
+    options: list[OptionCreate] = Field(
+        ...,
+        min_length=2,
+        description="Answer options; exactly one must be marked as correct",
+    )
+
+    @model_validator(mode="after")
+    def exactly_one_option_must_be_correct(self):
+        if sum(option.is_correct for option in self.options) != 1:
+            raise ValueError("exactly one option must have is_correct=true")
+        return self
 
 
 class QuestionUpdate(BaseModel):

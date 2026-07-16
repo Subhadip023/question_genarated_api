@@ -11,7 +11,12 @@ from app.controllers.question_controller import (
     QuestionCreatorHasNoOrganizationError,
 )
 from app.dependencies.db import get_db
-from app.schemas.question import QuestionCreate, QuestionResponse, QuestionUpdate
+from app.schemas.question import (
+    BulkQuestionCreate,
+    QuestionCreate,
+    QuestionResponse,
+    QuestionUpdate,
+)
 
 router = APIRouter(prefix="/questions", tags=["Questions"])
 
@@ -30,6 +35,34 @@ def create_question(
 ) -> QuestionResponse:
     try:
         return QuestionController.create_question(
+            data,
+            user_id=request.state.user_id,
+            user_role=request.state.user_role,
+            db=db,
+        )
+    except QuestionCreatorHasNoOrganizationError as exc:
+        raise HTTPException(
+            status_code=403,
+            detail=str(exc) or "User does not belong to an organization",
+        )
+
+
+@router.post(
+    "/bulk",
+    response_model=list[QuestionResponse],
+    status_code=201,
+    summary="Create multiple questions",
+    description="Create multiple questions and their answer options atomically.",
+)
+def create_questions_bulk(
+    data: list[BulkQuestionCreate],
+    request: Request,
+    db: Session = Depends(get_db),
+) -> list[QuestionResponse]:
+    if not data:
+        raise HTTPException(status_code=422, detail="At least one question is required")
+    try:
+        return QuestionController.create_questions_bulk(
             data,
             user_id=request.state.user_id,
             user_role=request.state.user_role,

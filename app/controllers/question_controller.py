@@ -9,7 +9,12 @@ from sqlalchemy.orm import Session, joinedload
 from app.models.question import Question
 from app.models.question_option import QuestionOption
 from app.models.organization_user import OrganizationUser
-from app.schemas.question import QuestionCreate, QuestionResponse, QuestionUpdate
+from app.schemas.question import (
+    BulkQuestionCreate,
+    QuestionCreate,
+    QuestionResponse,
+    QuestionUpdate,
+)
 
 
 class QuestionCreatorHasNoOrganizationError(Exception):
@@ -86,6 +91,78 @@ class QuestionController:
             .first()
         )
         return QuestionResponse.model_validate(question)
+
+    @staticmethod
+    def create_questions_bulk(
+        items: list[BulkQuestionCreate],
+        user_id: int,
+        user_role: int,
+        db: Session,
+    ) -> list[QuestionResponse]:
+        """Insert multiple questions and their options in one transaction."""
+        organization_id, is_global = QuestionController._creator_scope(
+            user_id, user_role, db
+        )
+        questions = [
+            Question(
+                question=item.question,
+                organization_id=organization_id,
+                user_id=user_id,
+                is_global=is_global,
+                marks=item.marks,
+                is_active=item.is_active,
+                options=[
+                    QuestionOption(ans=option.ans, is_correct=option.is_correct)
+                    for option in item.options
+                ],
+            )
+            for item in items
+        ]
+
+        try:
+            db.add_all(questions)
+            db.flush()
+            question_ids = [question.id for question in questions]
+            db.commit()
+        except Exception:
+            db.rollback()
+            raise
+
+        created = (
+            db.query(Question)
+            .options(joinedload(Question.options))
+            .filter(Question.id.in_(question_ids))
+            .all()
+        )
+        created_by_id = {question.id: question for question in created}
+        return [
+            QuestionResponse.model_validate(created_by_id[question_id])
+            for question_id in question_ids
+        ]
+
+    @staticmethod
+    def _creator_scope(
+        user_id: int, user_role: int, db: Session
+    ) -> tuple[int, bool]:
+        """Resolve ownership fields for a user who creates questions."""
+        if user_role not in (0, 1, 2):
+            raise QuestionCreatorHasNoOrganizationError(
+                "Only roles 0, 1, and 2 can create questions"
+            )
+        if user_role == 0:
+            return 0, True
+
+        membership = (
+            db.query(OrganizationUser)
+            .filter(OrganizationUser.user_id == user_id)
+            .order_by(OrganizationUser.org_id)
+            .first()
+        )
+        if membership is None:
+            raise QuestionCreatorHasNoOrganizationError(
+                "User does not belong to an organization"
+            )
+        return membership.org_id, False
 
     @staticmethod
     def get_all_questions(
