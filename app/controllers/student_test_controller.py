@@ -306,6 +306,7 @@ class StudentTestController:
                         for option in json.loads(q.options_snapshot)
                     ],
                     selected_option_id=q.selected_option_id,
+                    correct_option_id=q.correct_option_id if attempt.status != "in_progress" else None,
                 )
                 for q in attempt.questions
             ],

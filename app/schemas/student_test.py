@@ -41,6 +41,7 @@ class AttemptQuestionResponse(BaseModel):
     marks: Decimal
     options: list[AttemptOptionResponse]
     selected_option_id: int | None
+    correct_option_id: int | None = None
 
 
 class AttemptResponse(BaseModel):

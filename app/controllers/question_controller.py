@@ -146,13 +146,11 @@ class QuestionController:
     def _creator_scope(
         user_id: int, user_role: int, db: Session
     ) -> tuple[int, bool]:
-        """Resolve ownership fields for a user who creates questions."""
-        if user_role not in (0, 1, 2):
+        """Resolve ownership fields for a bulk-question creator."""
+        if user_role not in (1, 2):
             raise QuestionCreatorHasNoOrganizationError(
-                "Only roles 0, 1, and 2 can create questions"
+                "Only roles 1 and 2 can create questions in bulk"
             )
-        if user_role == 0:
-            return 0, True
 
         membership = (
             db.query(OrganizationUser)
