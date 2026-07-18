@@ -10,7 +10,7 @@ from app.models.organization_user import OrganizationUser
 from app.models.question import Question
 from app.models.series_question import SeriesQuestion
 from app.models.test_series import TestSeries
-from app.schemas.test_series import TestSeriesCreate, TestSeriesResponse
+from app.schemas.test_series import TestSeriesCreate, TestSeriesResponse, TestSeriesUpdate
 
 
 class TestSeriesPermissionError(Exception):
@@ -83,6 +83,86 @@ class TestSeriesController:
             raise
         response = TestSeriesController._get_response(series.id, db)
         response.invite_token = invite_token
+        return response
+
+    @staticmethod
+    def update(
+        series_id: int,
+        data: TestSeriesUpdate,
+        user_id: int,
+        user_role: int,
+        db: Session,
+    ) -> TestSeriesResponse | None:
+        series = db.query(TestSeries).filter(TestSeries.id == series_id).first()
+        if not series:
+            return None
+
+        # Verify permission
+        is_authorized = False
+        if user_role == 0 and series.org_id == 0:
+            is_authorized = True
+        elif user_role == 1:
+            membership = (
+                db.query(OrganizationUser)
+                .filter(OrganizationUser.user_id == user_id)
+                .order_by(OrganizationUser.org_id)
+                .first()
+            )
+            if membership and membership.org_id == series.org_id:
+                is_authorized = True
+        elif series.created_by == user_id:
+            is_authorized = True
+
+        if not is_authorized:
+            raise TestSeriesPermissionError("You do not have permission to edit this test series")
+
+        updates = data.model_dump(exclude_unset=True)
+        question_ids = updates.pop("question_ids", None)
+
+        if question_ids is not None:
+            question_query = db.query(Question).filter(
+                Question.id.in_(question_ids), Question.is_active.is_(True)
+            )
+            question_query = QuestionController._apply_visibility_filter(
+                question_query, user_id, user_role, db
+            )
+            allowed_ids = {question.id for question in question_query.all()}
+            if allowed_ids != set(question_ids):
+                raise TestSeriesQuestionError(
+                    "One or more questions do not exist, are inactive, or are not accessible"
+                )
+
+            # Delete existing questions association
+            db.query(SeriesQuestion).filter(SeriesQuestion.series_id == series_id).delete()
+            
+            # Create new association
+            series.series_questions = [
+                SeriesQuestion(question_id=qid, position=pos)
+                for pos, qid in enumerate(question_ids, start=1)
+            ]
+
+        for field, value in updates.items():
+            if value is not None:
+                setattr(series, field, value)
+
+        # Handle invite token hash when access type changes
+        invite_token = None
+        if "access_type" in updates:
+            if updates["access_type"] == "invite_only" and not series.invite_token_hash:
+                invite_token = secrets.token_urlsafe(24)
+                series.invite_token_hash = hashlib.sha256(invite_token.encode()).hexdigest()
+            elif updates["access_type"] == "public":
+                series.invite_token_hash = None
+
+        try:
+            db.commit()
+        except Exception:
+            db.rollback()
+            raise
+
+        response = TestSeriesController._get_response(series.id, db)
+        if invite_token:
+            response.invite_token = invite_token
         return response
 
     @staticmethod
