@@ -63,3 +63,13 @@ class QuestionResponse(BaseModel):
     options: list[OptionResponse] = Field(default_factory=list)
 
     model_config = {"from_attributes": True}
+
+
+class PaginatedQuestionResponse(BaseModel):
+    """One page of questions with pagination metadata."""
+
+    items: list[QuestionResponse]
+    total: int
+    page: int
+    page_size: int
+    total_pages: int

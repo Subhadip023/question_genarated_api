@@ -3,7 +3,7 @@ Question routes — thin route definitions that delegate to the controller.
 This acts as the View/Route (V) layer in MVC.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.orm import Session
 
 from app.controllers.question_controller import (
@@ -13,6 +13,7 @@ from app.controllers.question_controller import (
 from app.dependencies.db import get_db
 from app.schemas.question import (
     BulkQuestionCreate,
+    PaginatedQuestionResponse,
     QuestionCreate,
     QuestionResponse,
     QuestionUpdate,
@@ -77,16 +78,20 @@ def create_questions_bulk(
 
 @router.get(
     "/",
-    response_model=list[QuestionResponse],
+    response_model=PaginatedQuestionResponse,
     summary="List all questions",
 )
 def list_questions(
     request: Request,
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
     db: Session = Depends(get_db),
-) -> list[QuestionResponse]:
+) -> PaginatedQuestionResponse:
     return QuestionController.get_all_questions(
         user_id=request.state.user_id,
         user_role=request.state.user_role,
+        page=page,
+        page_size=page_size,
         db=db,
     )
 

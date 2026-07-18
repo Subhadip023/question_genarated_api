@@ -11,6 +11,7 @@ from app.models.question_option import QuestionOption
 from app.models.organization_user import OrganizationUser
 from app.schemas.question import (
     BulkQuestionCreate,
+    PaginatedQuestionResponse,
     QuestionCreate,
     QuestionResponse,
     QuestionUpdate,
@@ -168,15 +169,30 @@ class QuestionController:
     def get_all_questions(
         user_id: int,
         user_role: int,
+        page: int,
+        page_size: int,
         db: Session,
-    ) -> list[QuestionResponse]:
-        """Fetch only questions visible to the authenticated user."""
-        query = db.query(Question).options(joinedload(Question.options), joinedload(Question.topic))
+    ) -> PaginatedQuestionResponse:
+        """Fetch one page of questions visible to the authenticated user."""
+        query = db.query(Question)
         query = QuestionController._apply_visibility_filter(
             query, user_id, user_role, db
         )
-        questions = query.all()
-        return [QuestionResponse.model_validate(q) for q in questions]
+        total = query.count()
+        questions = (
+            query.options(joinedload(Question.options), joinedload(Question.topic))
+            .order_by(Question.id)
+            .offset((page - 1) * page_size)
+            .limit(page_size)
+            .all()
+        )
+        return PaginatedQuestionResponse(
+            items=[QuestionResponse.model_validate(question) for question in questions],
+            total=total,
+            page=page,
+            page_size=page_size,
+            total_pages=(total + page_size - 1) // page_size,
+        )
 
     @staticmethod
     def get_question(
