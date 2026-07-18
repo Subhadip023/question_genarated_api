@@ -181,7 +181,7 @@ class QuestionController:
         total = query.count()
         questions = (
             query.options(joinedload(Question.options), joinedload(Question.topic))
-            .order_by(Question.id)
+            .order_by(Question.id.desc())
             .offset((page - 1) * page_size)
             .limit(page_size)
             .all()
