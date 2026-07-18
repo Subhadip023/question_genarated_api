@@ -172,12 +172,15 @@ class QuestionController:
         page: int,
         page_size: int,
         db: Session,
+        topic_id: int | None = None,
     ) -> PaginatedQuestionResponse:
         """Fetch one page of questions visible to the authenticated user."""
         query = db.query(Question)
         query = QuestionController._apply_visibility_filter(
             query, user_id, user_role, db
         )
+        if topic_id is not None:
+            query = query.filter(Question.topic_id == topic_id)
         total = query.count()
         questions = (
             query.options(joinedload(Question.options), joinedload(Question.topic))
