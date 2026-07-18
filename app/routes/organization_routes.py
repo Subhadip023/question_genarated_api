@@ -1,11 +1,13 @@
 """HTTP routes for organizations."""
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
 from app.controllers.organization_controller import (
     OrganizationAdminEmailExistsError,
     OrganizationController,
+    OrganizationNotFoundError,
+    OrganizationUserPermissionError,
 )
 from app.dependencies.db import get_db
 from app.schemas.organization import (
@@ -14,6 +16,7 @@ from app.schemas.organization import (
     OrganizationResponse,
     OrganizationUpdate,
 )
+from app.schemas.user import UserCreate, UserResponse
 
 router = APIRouter(prefix="/organizations", tags=["Organizations"])
 
@@ -39,6 +42,37 @@ def create_organization(
 @router.get("/", response_model=list[OrganizationResponse])
 def list_organizations(db: Session = Depends(get_db)) -> list[OrganizationResponse]:
     return OrganizationController.get_all_organizations(db)
+
+
+@router.post(
+    "/{organization_id}/users",
+    response_model=UserResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Add a user to an organization (admin or superadmin only)",
+)
+def add_organization_user(
+    organization_id: int,
+    data: UserCreate,
+    request: Request,
+    db: Session = Depends(get_db),
+) -> UserResponse:
+    try:
+        return OrganizationController.add_user(
+            organization_id=organization_id,
+            data=data,
+            actor_user_id=request.state.user_id,
+            actor_role=request.state.user_role,
+            db=db,
+        )
+    except OrganizationNotFoundError:
+        raise HTTPException(status_code=404, detail="Organization not found") from None
+    except OrganizationUserPermissionError:
+        raise HTTPException(
+            status_code=403,
+            detail="Only this organization's admin or a superadmin can add users",
+        ) from None
+    except OrganizationAdminEmailExistsError:
+        raise HTTPException(status_code=409, detail="User email already exists") from None
 
 
 @router.patch(

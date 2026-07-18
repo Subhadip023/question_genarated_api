@@ -14,12 +14,20 @@ from app.schemas.organization import (
     OrganizationResponse,
     OrganizationUpdate,
 )
-from app.schemas.user import UserResponse
+from app.schemas.user import UserCreate, UserResponse
 from app.services.auth_service import hash_password
 
 
 class OrganizationAdminEmailExistsError(Exception):
     """Raised when the requested organization admin email already exists."""
+
+
+class OrganizationNotFoundError(Exception):
+    """Raised when an organization does not exist."""
+
+
+class OrganizationUserPermissionError(Exception):
+    """Raised when a user cannot manage an organization's members."""
 
 
 class OrganizationController:
@@ -75,6 +83,55 @@ class OrganizationController:
     def get_all_organizations(db: Session) -> list[OrganizationResponse]:
         organizations = db.query(Organization).order_by(Organization.id).all()
         return [OrganizationResponse.model_validate(item) for item in organizations]
+
+    @staticmethod
+    def add_user(
+        organization_id: int,
+        data: UserCreate,
+        actor_user_id: int,
+        actor_role: int,
+        db: Session,
+    ) -> UserResponse:
+        """Create a user and add them to an organization."""
+        organization = db.query(Organization.id).filter(
+            Organization.id == organization_id
+        ).first()
+        if organization is None:
+            raise OrganizationNotFoundError
+
+        if actor_role != 0:
+            is_admin_member = (
+                actor_role == 1
+                and db.query(OrganizationUser)
+                .filter(
+                    OrganizationUser.org_id == organization_id,
+                    OrganizationUser.user_id == actor_user_id,
+                )
+                .first()
+                is not None
+            )
+            if not is_admin_member:
+                raise OrganizationUserPermissionError
+
+        user = User(
+            role=data.role,
+            name=data.name.strip(),
+            email=data.email.strip().lower(),
+            password=hash_password(data.password),
+        )
+        try:
+            db.add(user)
+            db.flush()
+            db.add(OrganizationUser(org_id=organization_id, user_id=user.id))
+            db.commit()
+            db.refresh(user)
+        except IntegrityError as exc:
+            db.rollback()
+            raise OrganizationAdminEmailExistsError from exc
+        except Exception:
+            db.rollback()
+            raise
+        return UserResponse.model_validate(user)
 
     @staticmethod
     def update_organization(

@@ -11,7 +11,7 @@ class TestSeriesCreate(BaseModel):
     access_type: Literal["invite_only", "public"] = "invite_only"
     valid_until: datetime
     duration_seconds: int = Field(..., gt=0)
-    question_ids: list[int] = Field(..., min_length=1)
+    question_ids: list[int] = Field(default_factory=list)
     is_active: bool = True
 
     @field_validator("valid_until")
@@ -52,7 +52,7 @@ class TestSeriesUpdate(BaseModel):
     access_type: Literal["invite_only", "public"] | None = None
     valid_until: datetime | None = None
     duration_seconds: int | None = Field(None, gt=0)
-    question_ids: list[int] | None = Field(None, min_length=1)
+    question_ids: list[int] | None = Field(None)
     is_active: bool | None = None
 
     @field_validator("valid_until")
