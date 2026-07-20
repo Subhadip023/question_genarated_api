@@ -1,5 +1,6 @@
 """Business logic for organizations."""
 
+import logging
 import secrets
 
 from sqlalchemy.exc import IntegrityError
@@ -18,6 +19,8 @@ from app.schemas.organization import (
 from app.schemas.user import UserCreate, UserResponse
 from app.services.auth_service import hash_password
 from app.services.mail_service import MailService, MailServiceError
+
+logger = logging.getLogger(__name__)
 
 
 class OrganizationAdminEmailExistsError(Exception):
@@ -43,7 +46,11 @@ class OrganizationController:
     def create_organization(
         data: OrganizationCreate, db: Session
     ) -> OrganizationCreateResponse:
-        temporary_password = secrets.token_urlsafe(12)
+        admin_password = (
+            data.admin.password.strip()
+            if data.admin.password and data.admin.password.strip()
+            else secrets.token_urlsafe(12)
+        )
         organization = Organization(
             name=data.name.strip(),
             code=OrganizationController._generate_unique_code(db),
@@ -55,13 +62,24 @@ class OrganizationController:
             role=1,
             name=data.admin.name.strip(),
             email=data.admin.email.strip().lower(),
-            password=hash_password(temporary_password),
+            password=hash_password(admin_password),
         )
         try:
             db.add(organization)
             db.add(admin)
             db.flush()
             db.add(OrganizationUser(org_id=organization.id, user_id=admin.id))
+            db.commit()
+            db.refresh(organization)
+            db.refresh(admin)
+        except IntegrityError as exc:
+            db.rollback()
+            raise OrganizationAdminEmailExistsError from exc
+        except Exception:
+            db.rollback()
+            raise
+
+        try:
             MailService.send_mail(
                 to_email=admin.email,
                 subject="Welcome to QMaster - Your organization account",
@@ -70,23 +88,16 @@ class OrganizationController:
                     "Your organization has been created.\n\n"
                     f"Organization name: {organization.name}\n"
                     f"Email: {admin.email}\n"
-                    f"Temporary password: {temporary_password}\n\n"
+                    f"Password: {admin_password}\n\n"
                     f"Login: {settings.app_url.rstrip('/')}/login\n\n"
                     "Please reset your password after you log in."
                 ),
             )
-            db.commit()
-            db.refresh(organization)
-            db.refresh(admin)
         except MailServiceError as exc:
-            db.rollback()
-            raise OrganizationWelcomeEmailError from exc
-        except IntegrityError as exc:
-            db.rollback()
-            raise OrganizationAdminEmailExistsError from exc
-        except Exception:
-            db.rollback()
-            raise
+            logger.warning(
+                f"Organization created successfully, but welcome email to {admin.email} failed: {exc}"
+            )
+
         return OrganizationCreateResponse(
             organization=OrganizationResponse.model_validate(organization),
             admin=UserResponse.model_validate(admin),
