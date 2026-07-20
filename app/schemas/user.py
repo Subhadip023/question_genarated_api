@@ -49,6 +49,18 @@ class LoginRequest(BaseModel):
     password: str = Field(..., min_length=8, max_length=255)
 
 
+class ResetPasswordRequest(BaseModel):
+    """Authenticated password-change payload."""
+
+    old_password: str = Field(..., min_length=8, max_length=255)
+    new_password: str = Field(..., min_length=8, max_length=255)
+    confirm_new_password: str = Field(..., min_length=8, max_length=255)
+
+
+class ResetPasswordResponse(BaseModel):
+    message: str = "Password updated successfully"
+
+
 class StudentRegister(BaseModel):
     """Public registration payload; role is always assigned as student (3)."""
 

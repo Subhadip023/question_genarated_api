@@ -8,6 +8,7 @@ from app.controllers.organization_controller import (
     OrganizationController,
     OrganizationNotFoundError,
     OrganizationUserPermissionError,
+    OrganizationWelcomeEmailError,
 )
 from app.dependencies.db import get_db
 from app.schemas.organization import (
@@ -36,6 +37,11 @@ def create_organization(
         raise HTTPException(
             status_code=409,
             detail="Admin email already exists",
+        ) from None
+    except OrganizationWelcomeEmailError:
+        raise HTTPException(
+            status_code=502,
+            detail="Organization admin welcome email could not be sent",
         ) from None
 
 

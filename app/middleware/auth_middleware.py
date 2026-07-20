@@ -12,8 +12,16 @@ from app.services.auth_service import InvalidTokenError, decode_access_token
 class AuthMiddleware(BaseHTTPMiddleware):
     """Require a valid bearer token for non-public API routes."""
 
-    PUBLIC_PATHS = {"/", "/health", "/auth/login", "/auth/register", "/openapi.json"}
+    PUBLIC_PATHS = {
+        "/",
+        "/health",
+        "/auth/login",
+        "/auth/register",
+        "/openapi.json",
+    }
     PUBLIC_PREFIXES = ("/docs", "/redoc")
+    MAIL_PATHS = {"/mail/send", "/send-mail"}
+    MAIL_ALLOWED_ROLES = {0, 1, 2}
 
     async def dispatch(self, request: Request, call_next):
         path = request.url.path.rstrip("/") or "/"
@@ -45,6 +53,12 @@ class AuthMiddleware(BaseHTTPMiddleware):
         finally:
             db.close()
 
+        if (
+            path in self.MAIL_PATHS
+            and request.state.user_role not in self.MAIL_ALLOWED_ROLES
+        ):
+            return self._forbidden("Only roles 0, 1, and 2 can send mail")
+
         return await call_next(request)
 
     @staticmethod
@@ -54,3 +68,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
             content={"detail": detail},
             headers={"WWW-Authenticate": "Bearer"},
         )
+
+    @staticmethod
+    def _forbidden(detail: str) -> JSONResponse:
+        return JSONResponse(status_code=403, content={"detail": detail})

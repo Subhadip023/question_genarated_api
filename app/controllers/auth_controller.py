@@ -6,7 +6,14 @@ from sqlalchemy.exc import IntegrityError
 from app.models.organization import Organization
 from app.models.organization_user import OrganizationUser
 from app.models.user import User
-from app.schemas.user import LoginRequest, StudentRegister, TokenResponse, UserResponse
+from app.schemas.user import (
+    LoginRequest,
+    ResetPasswordRequest,
+    ResetPasswordResponse,
+    StudentRegister,
+    TokenResponse,
+    UserResponse,
+)
 from app.services.auth_service import create_access_token, hash_password, verify_password
 
 
@@ -16,6 +23,14 @@ class InvalidCredentialsError(Exception):
 
 class EmailAlreadyExistsError(Exception):
     """Raised when a registration email is already used."""
+
+
+class InvalidOldPasswordError(Exception):
+    """Raised when the supplied current password is incorrect."""
+
+
+class PasswordConfirmationError(Exception):
+    """Raised when the new password and its confirmation differ."""
 
 
 class AuthController:
@@ -70,3 +85,23 @@ class AuthController:
             user_role=user.role,
             user=UserResponse.model_validate(user),
         )
+
+    @staticmethod
+    def reset_password(
+        user_id: int, data: ResetPasswordRequest, db: Session
+    ) -> ResetPasswordResponse:
+        if data.new_password != data.confirm_new_password:
+            raise PasswordConfirmationError
+
+        user = db.query(User).filter(User.id == user_id).first()
+        if user is None or not verify_password(data.old_password, user.password):
+            raise InvalidOldPasswordError
+
+        user.password = hash_password(data.new_password)
+        try:
+            db.commit()
+        except Exception:
+            db.rollback()
+            raise
+
+        return ResetPasswordResponse()

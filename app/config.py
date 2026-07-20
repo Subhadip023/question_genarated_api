@@ -19,6 +19,15 @@ class Settings(BaseSettings):
     debug: bool = True
     auth_secret_key: str = "change-this-secret-in-production"
     auth_token_expire_hours: int = 24
+    app_url: str = "http://localhost:3000"
+
+    # SMTP Email Settings (optional, configured via .env)
+    smtp_host: str = "smtp.gmail.com"
+    smtp_port: int = 587
+    smtp_user: str = ""
+    smtp_password: str = ""
+    smtp_from_email: str = ""
+    smtp_use_tls: bool = True
 
     model_config = SettingsConfigDict(
         env_file=".env",

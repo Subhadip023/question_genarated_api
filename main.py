@@ -16,6 +16,7 @@ from app.middleware.organization_permission_middleware import (
 from app.routes import (
     auth_routes,
     health_routes,
+    mail_routes,
     organization_routes,
     question_option_routes,
     question_routes,
@@ -57,6 +58,7 @@ async def global_exception_handler(request: Request, exc: Exception):
 
 # Register routers
 app.include_router(health_routes.router)
+app.include_router(mail_routes.router)
 app.include_router(question_routes.router)
 app.include_router(topic_routes.router)
 app.include_router(question_option_routes.router)
