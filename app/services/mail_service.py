@@ -60,27 +60,13 @@ class MailService:
                 logger.info(f"Email successfully delivered to {to_email} via SMTP.")
                 return {
                     "status": "success",
-                    "message": "Email sent successfully via SMTP",
+                    "message": f"Email successfully delivered to {to_email}",
                     "to_email": to_email,
                     "subject": subject,
                 }
             except Exception as exc:
                 logger.error(f"Failed to send email to {to_email} via SMTP ({exc}).")
-                logger.info(
-                    f"[DEV MAIL LOG - FALLBACK] Simulated email dispatch:\n"
-                    f"From: {sender_email}\n"
-                    f"To: {to_email}\n"
-                    f"Subject: {subject}\n"
-                    f"Body: {body[:300]}..."
-                )
-                if settings.debug:
-                    return {
-                        "status": "simulated",
-                        "message": f"SMTP connection error ({exc}). Email logged to server console.",
-                        "to_email": to_email,
-                        "subject": subject,
-                    }
-                raise MailServiceError(f"Failed to send email via SMTP server: {str(exc)}") from exc
+                raise MailServiceError(f"SMTP error: {exc}") from exc
         else:
             # Development/fallback mode when SMTP credentials are not configured in .env
             logger.info(
@@ -93,7 +79,7 @@ class MailService:
 
         return {
             "status": "success",
-            "message": "Email sent successfully (simulated log mode)",
+            "message": f"Simulated email logged to server console for {to_email}",
             "to_email": to_email,
             "subject": subject,
         }
