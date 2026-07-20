@@ -47,14 +47,39 @@ class MailService:
         if settings.smtp_user and settings.smtp_password:
             try:
                 logger.info(f"Connecting to SMTP server {settings.smtp_host}:{settings.smtp_port} to send mail to {to_email}...")
-                with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=10) as server:
-                    if settings.smtp_use_tls:
-                        server.starttls()
-                    server.login(settings.smtp_user, settings.smtp_password)
-                    server.send_message(msg)
+                if settings.smtp_port == 465 or settings.smtp_use_ssl:
+                    with smtplib.SMTP_SSL(settings.smtp_host, settings.smtp_port, timeout=15) as server:
+                        server.login(settings.smtp_user, settings.smtp_password)
+                        server.send_message(msg)
+                else:
+                    with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=15) as server:
+                        if settings.smtp_use_tls:
+                            server.starttls()
+                        server.login(settings.smtp_user, settings.smtp_password)
+                        server.send_message(msg)
                 logger.info(f"Email successfully delivered to {to_email} via SMTP.")
+                return {
+                    "status": "success",
+                    "message": "Email sent successfully via SMTP",
+                    "to_email": to_email,
+                    "subject": subject,
+                }
             except Exception as exc:
-                logger.error(f"Failed to send email to {to_email} via SMTP: {exc}")
+                logger.error(f"Failed to send email to {to_email} via SMTP ({exc}).")
+                logger.info(
+                    f"[DEV MAIL LOG - FALLBACK] Simulated email dispatch:\n"
+                    f"From: {sender_email}\n"
+                    f"To: {to_email}\n"
+                    f"Subject: {subject}\n"
+                    f"Body: {body[:300]}..."
+                )
+                if settings.debug:
+                    return {
+                        "status": "simulated",
+                        "message": f"SMTP connection error ({exc}). Email logged to server console.",
+                        "to_email": to_email,
+                        "subject": subject,
+                    }
                 raise MailServiceError(f"Failed to send email via SMTP server: {str(exc)}") from exc
         else:
             # Development/fallback mode when SMTP credentials are not configured in .env
@@ -63,12 +88,12 @@ class MailService:
                 f"From: {sender_email}\n"
                 f"To: {to_email}\n"
                 f"Subject: {subject}\n"
-                f"Body: {body[:200]}..."
+                f"Body: {body[:300]}..."
             )
 
         return {
             "status": "success",
-            "message": "Email sent successfully",
+            "message": "Email sent successfully (simulated log mode)",
             "to_email": to_email,
             "subject": subject,
         }
