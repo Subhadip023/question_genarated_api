@@ -9,6 +9,7 @@ from decimal import Decimal
 from sqlalchemy.orm import Session, joinedload
 
 from app.models.question import Question
+from app.models.series_question import SeriesQuestion
 from app.models.test_attempt import AttemptQuestion, TestAttempt
 from app.models.test_series import TestSeries
 from app.schemas.student_test import (
@@ -36,7 +37,11 @@ class StudentTestController:
         now = datetime.now(timezone.utc)
         items = (
             db.query(TestSeries)
-            .options(joinedload(TestSeries.series_questions))
+            .options(
+                joinedload(TestSeries.series_questions)
+                .joinedload(SeriesQuestion.question)
+                .joinedload(Question.topic)
+            )
             .filter(
                 TestSeries.access_type == "public",
                 TestSeries.is_active.is_(True),
@@ -45,17 +50,30 @@ class StudentTestController:
             .order_by(TestSeries.valid_until)
             .all()
         )
-        return [
-            AvailableSeriesResponse(
-                id=item.id,
-                name=item.name,
-                org_id=item.org_id,
-                valid_until=item.valid_until,
-                duration_seconds=item.duration_seconds,
-                question_count=len(item.series_questions),
+        results = []
+        for item in items:
+            topic_names = sorted(
+                list(
+                    {
+                        sq.question.topic.name
+                        for sq in item.series_questions
+                        if sq.question and sq.question.topic and sq.question.topic.name
+                    }
+                )
             )
-            for item in items
-        ]
+            results.append(
+                AvailableSeriesResponse(
+                    id=item.id,
+                    name=item.name,
+                    org_id=item.org_id,
+                    valid_until=item.valid_until,
+                    duration_seconds=item.duration_seconds,
+                    question_count=len(item.series_questions),
+                    topics=topic_names,
+                )
+            )
+        return results
+
 
     @staticmethod
     def start(

@@ -20,3 +20,5 @@ class SeriesQuestion(Base):
     series: Mapped["TestSeries"] = relationship(  # noqa: F821
         "TestSeries", back_populates="series_questions"
     )
+    question: Mapped["Question"] = relationship("Question")  # noqa: F821
+

@@ -13,6 +13,8 @@ class AvailableSeriesResponse(BaseModel):
     valid_until: datetime
     duration_seconds: int
     question_count: int
+    topics: list[str] = Field(default_factory=list)
+
 
 
 class StartAttemptRequest(BaseModel):
