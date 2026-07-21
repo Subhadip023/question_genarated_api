@@ -9,10 +9,27 @@ from app.controllers.test_series_controller import (
     TestSeriesQuestionError,
 )
 from app.dependencies.db import get_db
-from app.schemas.test_series import TestSeriesCreate, TestSeriesResponse, TestSeriesUpdate
-
+from app.schemas.test_series import (
+    TestSeriesCreate,
+    TestSeriesResponse,
+    TestSeriesResultsResponse,
+    TestSeriesUpdate,
+)
 
 router = APIRouter(prefix="/test-series", tags=["Test Series"])
+
+
+@router.get("/{series_id}/results", response_model=TestSeriesResultsResponse)
+def get_test_series_results(
+    series_id: int, request: Request, db: Session = Depends(get_db)
+) -> TestSeriesResultsResponse:
+    try:
+        return TestSeriesController.get_results(
+            series_id, request.state.user_id, request.state.user_role, db
+        )
+    except TestSeriesPermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from None
+
 
 
 @router.post("/", response_model=TestSeriesResponse, status_code=status.HTTP_201_CREATED)

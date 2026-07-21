@@ -3,14 +3,25 @@
 import secrets
 import hashlib
 
+from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 
 from app.controllers.question_controller import QuestionController
 from app.models.organization_user import OrganizationUser
 from app.models.question import Question
 from app.models.series_question import SeriesQuestion
+from app.models.test_attempt import TestAttempt
 from app.models.test_series import TestSeries
-from app.schemas.test_series import TestSeriesCreate, TestSeriesResponse, TestSeriesUpdate
+from app.models.user import User
+from app.schemas.test_series import (
+    TestSeriesCreate,
+    TestSeriesResponse,
+    TestSeriesResultItem,
+    TestSeriesResultsResponse,
+    TestSeriesUpdate,
+)
+
+
 
 
 class TestSeriesPermissionError(Exception):
@@ -35,11 +46,10 @@ class TestSeriesController:
                 .order_by(OrganizationUser.org_id)
                 .first()
             )
-            if membership is None:
-                raise TestSeriesPermissionError("User does not belong to an organization")
-            org_id = membership.org_id
+            org_id = membership.org_id if membership else 0
         else:
             raise TestSeriesPermissionError("Only roles 0, 1, and 2 can create test series")
+
 
         question_query = db.query(Question).filter(
             Question.id.in_(data.question_ids), Question.is_active.is_(True)
@@ -169,7 +179,23 @@ class TestSeriesController:
     def list_for_user(user_id: int, user_role: int, db: Session) -> list[TestSeriesResponse]:
         query = db.query(TestSeries).options(joinedload(TestSeries.series_questions))
         query = TestSeriesController._apply_visibility(query, user_id, user_role, db)
-        return [TestSeriesController._serialize(item) for item in query.all()]
+        items = query.all()
+        series_ids = [item.id for item in items]
+
+        attempt_counts = {}
+        if series_ids:
+            counts = (
+                db.query(TestAttempt.series_id, func.count(TestAttempt.id))
+                .filter(TestAttempt.series_id.in_(series_ids))
+                .group_by(TestAttempt.series_id)
+                .all()
+            )
+            attempt_counts = dict(counts)
+
+        return [
+            TestSeriesController._serialize(item, attempt_count=attempt_counts.get(item.id, 0))
+            for item in items
+        ]
 
     @staticmethod
     def get_for_user(
@@ -178,20 +204,96 @@ class TestSeriesController:
         query = db.query(TestSeries).filter(TestSeries.id == series_id)
         query = TestSeriesController._apply_visibility(query, user_id, user_role, db)
         item = query.options(joinedload(TestSeries.series_questions)).first()
-        return TestSeriesController._serialize(item) if item else None
+        if not item:
+            return None
+        count = (
+            db.query(func.count(TestAttempt.id))
+            .filter(TestAttempt.series_id == series_id)
+            .scalar()
+            or 0
+        )
+        return TestSeriesController._serialize(item, attempt_count=count)
 
     @staticmethod
     def _apply_visibility(query, user_id: int, user_role: int, db: Session):
-        if user_role == 0:
-            return query.filter(TestSeries.org_id == 0)
-        if user_role == 1:
+        role_int = int(user_role)
+        if role_int in (0, 1):
+            return query
+
+        if role_int == 2:
             org_ids = db.query(OrganizationUser.org_id).filter(
                 OrganizationUser.user_id == user_id
             )
-            return query.filter(TestSeries.org_id.in_(org_ids))
-        if user_role == 2:
-            return query.filter(TestSeries.created_by == user_id)
+            return query.filter(
+                (TestSeries.org_id == 0)
+                | (TestSeries.access_type == "public")
+                | (TestSeries.org_id.in_(org_ids))
+                | (TestSeries.created_by == user_id)
+            )
+
         return query.filter(False)
+
+
+
+
+
+    @staticmethod
+    def get_results(
+        series_id: int, user_id: int, user_role: int, db: Session
+    ) -> TestSeriesResultsResponse:
+        series = TestSeriesController.get_for_user(series_id, user_id, user_role, db)
+        if series is None:
+            raise TestSeriesPermissionError("Test series not found or access denied")
+
+        attempts = (
+            db.query(TestAttempt, User)
+            .join(User, TestAttempt.user_id == User.id)
+            .filter(TestAttempt.series_id == series_id)
+            .order_by(TestAttempt.started_at.desc())
+            .all()
+        )
+
+        items = []
+        completed_scores = []
+        for attempt, user in attempts:
+            pct = (
+                float((attempt.score / attempt.total_marks) * 100)
+                if attempt.total_marks > 0
+                else 0.0
+            )
+            if attempt.status == "submitted":
+                completed_scores.append(float(attempt.score))
+            items.append(
+                TestSeriesResultItem(
+                    attempt_id=attempt.id,
+                    user_id=user.id,
+                    student_name=user.name,
+                    student_email=user.email,
+                    started_at=attempt.started_at,
+                    submitted_at=attempt.submitted_at,
+                    status=attempt.status,
+                    score=float(attempt.score),
+                    total_marks=float(attempt.total_marks),
+                    percentage=round(pct, 2),
+                )
+            )
+
+        avg_score = (
+            sum(completed_scores) / len(completed_scores)
+            if len(completed_scores) > 0
+            else 0.0
+        )
+
+        return TestSeriesResultsResponse(
+            series_id=series.id,
+            series_name=series.name,
+            invite_token=getattr(series, "invite_token", None),
+            access_type=series.access_type,
+            total_attempts=len(attempts),
+            completed_attempts=len(completed_scores),
+            average_score=round(avg_score, 2),
+            results=items,
+        )
 
     @staticmethod
     def _get_response(series_id: int, db: Session) -> TestSeriesResponse:
@@ -201,10 +303,16 @@ class TestSeriesController:
             .filter(TestSeries.id == series_id)
             .first()
         )
-        return TestSeriesController._serialize(item)
+        count = (
+            db.query(func.count(TestAttempt.id))
+            .filter(TestAttempt.series_id == series_id)
+            .scalar()
+            or 0
+        )
+        return TestSeriesController._serialize(item, attempt_count=count)
 
     @staticmethod
-    def _serialize(item: TestSeries) -> TestSeriesResponse:
+    def _serialize(item: TestSeries, attempt_count: int = 0) -> TestSeriesResponse:
         return TestSeriesResponse(
             id=item.id,
             code=item.code,
@@ -219,4 +327,8 @@ class TestSeriesController:
             question_ids=[entry.question_id for entry in item.series_questions],
             created_at=item.created_at,
             updated_at=item.updated_at,
+            attempt_count=attempt_count,
         )
+
+
+

@@ -45,6 +45,8 @@ class TestSeriesResponse(BaseModel):
     question_ids: list[int]
     created_at: datetime
     updated_at: datetime
+    attempt_count: int = 0
+
 
 
 class TestSeriesUpdate(BaseModel):
@@ -74,4 +76,30 @@ class TestSeriesUpdate(BaseModel):
         if len(value) != len(set(value)):
             raise ValueError("question_ids must not contain duplicates")
         return value
+
+
+class TestSeriesResultItem(BaseModel):
+    attempt_id: int
+    user_id: int
+    student_name: str
+    student_email: str
+    started_at: datetime
+    submitted_at: datetime | None
+    status: str
+    score: float
+    total_marks: float
+    percentage: float
+
+
+class TestSeriesResultsResponse(BaseModel):
+    series_id: int
+    series_name: str
+    invite_token: str | None = None
+    access_type: str | None = None
+    total_attempts: int
+    completed_attempts: int
+    average_score: float
+    results: list[TestSeriesResultItem]
+
+
 
