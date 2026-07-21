@@ -221,10 +221,3 @@ Specify a license (e.g., MIT, Apache-2.0). If undecided, add a TODO to pick a li
 - Maintainer: Subhadip (GitHub: @Subhadip023)
 - Email: (add preferred contact)
 
----
-
-If you want, I can also:
-- Update the README with actual endpoint examples from your code (I can scan the repo for app files and add examples), or
-- Rename the repository references to `question_generated_api` and update code/references accordingly.
-
-GitHub Copilot Chat Assistant
