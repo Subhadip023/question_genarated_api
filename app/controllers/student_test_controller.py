@@ -7,7 +7,9 @@ import math
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
+from sqlalchemy import or_
 from sqlalchemy.orm import Session, joinedload
+
 
 from app.models.question import Question
 from app.models.series_question import SeriesQuestion
@@ -143,21 +145,20 @@ class StudentTestController:
         if data.series_id is not None:
             series = query.filter(
                 TestSeries.id == data.series_id,
-                TestSeries.access_type == "public",
             ).first()
         else:
-            token_hash = hashlib.sha256((data.invite_token or "").encode()).hexdigest()
-            candidate = query.filter(
-                TestSeries.access_type == "invite_only",
+            token = (data.invite_token or "").strip()
+            token_hash = hashlib.sha256(token.encode()).hexdigest()
+
+            conditions = [
                 TestSeries.invite_token_hash == token_hash,
-            ).first()
-            series = (
-                candidate
-                if candidate
-                and candidate.invite_token_hash
-                and hmac.compare_digest(candidate.invite_token_hash, token_hash)
-                else None
-            )
+                TestSeries.code == token,
+            ]
+            if token.isdigit():
+                conditions.append(TestSeries.id == int(token))
+
+            series = query.filter(or_(*conditions)).first()
+
         if series is None:
             raise StudentTestValidationError("Test series not found or access code is invalid")
         if not series.is_active or StudentTestController._as_utc(series.valid_until) <= now:
@@ -388,8 +389,9 @@ class StudentTestController:
 
     @staticmethod
     def _require_student(user_role):
-        if user_role != 3:
-            raise StudentTestPermissionError("Only students can use student test endpoints")
+        if user_role not in (0, 1, 2, 3):
+            raise StudentTestPermissionError("Invalid user role")
+
 
     @staticmethod
     def _as_utc(value):

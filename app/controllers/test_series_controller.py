@@ -66,13 +66,15 @@ class TestSeriesController:
         invite_token = (
             secrets.token_urlsafe(24) if data.access_type == "invite_only" else None
         )
+        series_code = secrets.token_hex(4).upper()
         series = TestSeries(
-            code=None,
+            code=series_code,
             invite_token_hash=(
                 hashlib.sha256(invite_token.encode()).hexdigest()
                 if invite_token
                 else None
             ),
+
             access_type=data.access_type,
             name=data.name.strip(),
             org_id=org_id,
