@@ -155,7 +155,10 @@ def delete_question(
     db: Session = Depends(get_db),
 ) -> dict[str, str]:
     if request.state.user_role not in (0, 1, 2):
-        raise HTTPException(status_code=403, detail="Students cannot delete questions")
+        raise HTTPException(
+            status_code=403,
+            detail="Only Super Admins, Admins, and Teachers can delete questions",
+        )
     visible = QuestionController.get_question(
         question_id, request.state.user_id, request.state.user_role, db
     )

@@ -148,7 +148,7 @@ class QuestionController:
         user_id: int, user_role: int, db: Session
     ) -> tuple[int, bool]:
         """Resolve ownership fields for a bulk-question creator."""
-        if user_role not in (1, 2):
+        if user_role not in (0,1,2):
             raise QuestionCreatorHasNoOrganizationError(
                 "Only roles 1 and 2 can create questions in bulk"
             )
@@ -222,7 +222,7 @@ class QuestionController:
     def _apply_visibility_filter(query, user_id: int, user_role: int, db: Session):
         """Apply role-based question visibility to a SQLAlchemy query."""
         if user_role == 0:
-            return query.filter(Question.is_global.is_(True))
+            return query
 
         if user_role == 1:
             organization_ids = (
