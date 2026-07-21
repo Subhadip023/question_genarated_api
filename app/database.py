@@ -13,7 +13,7 @@ from sqlalchemy.orm import DeclarativeBase, sessionmaker
 from app.config import settings
 
 engine = create_engine(
-    settings.database_url,
+    settings.database_url_object,  # URL object handles special chars (e.g. @ in password)
     pool_pre_ping=True,      # ping before each use — auto-reconnects on stale connections
     pool_recycle=55,         # recycle connections every 55s (MySQL drops idle after ~60s)
     pool_size=2,             # max persistent connections in pool

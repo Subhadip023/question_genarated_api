@@ -39,9 +39,24 @@ class Settings(BaseSettings):
     @property
     def database_url(self) -> str:
         """Build MySQL connection URL from individual credentials."""
+        from urllib.parse import quote_plus
+        encoded_password = quote_plus(self.mysql_password)
         return (
-            f"mysql+pymysql://{self.mysql_user}:{self.mysql_password}"
+            f"mysql+pymysql://{self.mysql_user}:{encoded_password}"
             f"@{self.mysql_host}:{self.mysql_port}/{self.mysql_database}"
+        )
+
+    @property
+    def database_url_object(self):
+        """Return a SQLAlchemy URL object (safe for special chars in password)."""
+        from sqlalchemy.engine import URL
+        return URL.create(
+            drivername="mysql+pymysql",
+            username=self.mysql_user,
+            password=self.mysql_password,
+            host=self.mysql_host,
+            port=self.mysql_port,
+            database=self.mysql_database,
         )
 
 

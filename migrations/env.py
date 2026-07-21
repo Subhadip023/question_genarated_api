@@ -2,7 +2,8 @@
 
 from logging.config import fileConfig
 
-from sqlalchemy import engine_from_config, pool
+from sqlalchemy import pool, create_engine
+from sqlalchemy.engine import URL
 
 from alembic import context
 
@@ -24,8 +25,15 @@ import app.models.test_attempt  # noqa: F401
 # Alembic Config object
 config = context.config
 
-# Inject the dynamic DB URL — overrides anything in alembic.ini
-config.set_main_option("sqlalchemy.url", settings.database_url)
+# Build the DB URL object directly — avoids configparser % interpolation errors
+db_url = URL.create(
+    drivername="mysql+pymysql",
+    username=settings.mysql_user,
+    password=settings.mysql_password,
+    host=settings.mysql_host,
+    port=settings.mysql_port,
+    database=settings.mysql_database,
+)
 
 # Set up Python logging from alembic.ini
 if config.config_file_name is not None:
@@ -37,9 +45,8 @@ target_metadata = Base.metadata
 
 def run_migrations_offline() -> None:
     """Run migrations in 'offline' mode (no live DB connection needed)."""
-    url = config.get_main_option("sqlalchemy.url")
     context.configure(
-        url=url,
+        url=db_url,
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
@@ -50,11 +57,7 @@ def run_migrations_offline() -> None:
 
 def run_migrations_online() -> None:
     """Run migrations in 'online' mode (live DB connection)."""
-    connectable = engine_from_config(
-        config.get_section(config.config_ini_section, {}),
-        prefix="sqlalchemy.",
-        poolclass=pool.NullPool,
-    )
+    connectable = create_engine(db_url, poolclass=pool.NullPool)
     with connectable.connect() as connection:
         context.configure(
             connection=connection,

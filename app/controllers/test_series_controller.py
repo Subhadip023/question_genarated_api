@@ -219,21 +219,11 @@ class TestSeriesController:
     @staticmethod
     def _apply_visibility(query, user_id: int, user_role: int, db: Session):
         role_int = int(user_role)
-        if role_int in (0, 1):
+        if role_int in (0, 1, 2):
             return query
 
-        if role_int == 2:
-            org_ids = db.query(OrganizationUser.org_id).filter(
-                OrganizationUser.user_id == user_id
-            )
-            return query.filter(
-                (TestSeries.org_id == 0)
-                | (TestSeries.access_type == "public")
-                | (TestSeries.org_id.in_(org_ids))
-                | (TestSeries.created_by == user_id)
-            )
-
         return query.filter(False)
+
 
 
 

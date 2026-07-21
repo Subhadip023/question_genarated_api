@@ -35,8 +35,9 @@ class TestSeriesResponse(BaseModel):
     id: int
     code: str | None
     invite_token: str | None = None
-    access_type: Literal["invite_only", "public"]
+    access_type: str
     name: str
+
     org_id: int
     created_by: int
     valid_until: datetime

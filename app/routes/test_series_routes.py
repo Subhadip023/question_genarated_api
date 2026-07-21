@@ -50,9 +50,14 @@ def create_test_series(
 def list_test_series(
     request: Request, db: Session = Depends(get_db)
 ) -> list[TestSeriesResponse]:
-    return TestSeriesController.list_for_user(
-        request.state.user_id, request.state.user_role, db
-    )
+    try:
+        return TestSeriesController.list_for_user(
+            request.state.user_id, request.state.user_role, db
+        )
+    except Exception as exc:
+        import traceback
+        raise HTTPException(status_code=500, detail=f"Error listing test series: {str(exc)}\n{traceback.format_exc()}") from None
+
 
 
 @router.get("/{series_id}", response_model=TestSeriesResponse)
