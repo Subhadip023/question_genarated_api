@@ -16,6 +16,15 @@ class AvailableSeriesResponse(BaseModel):
     topics: list[str] = Field(default_factory=list)
 
 
+class PaginatedAvailableSeriesResponse(BaseModel):
+    items: list[AvailableSeriesResponse]
+    total: int
+    page: int
+    limit: int
+    total_pages: int
+
+
+
 
 class StartAttemptRequest(BaseModel):
     series_id: int | None = None

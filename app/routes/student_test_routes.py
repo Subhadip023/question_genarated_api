@@ -13,6 +13,7 @@ from app.schemas.student_test import (
     AttemptHistoryResponse,
     AttemptResponse,
     AvailableSeriesResponse,
+    PaginatedAvailableSeriesResponse,
     SaveAnswerRequest,
     StartAttemptRequest,
 )
@@ -30,11 +31,30 @@ def _call(action):
         raise HTTPException(status_code=400, detail=str(exc)) from None
 
 
-@router.get("/test-series", response_model=list[AvailableSeriesResponse])
+@router.get("/test-series", response_model=PaginatedAvailableSeriesResponse)
 def list_public_tests(
-    request: Request, db: Session = Depends(get_db)
-) -> list[AvailableSeriesResponse]:
-    return _call(lambda: StudentTestController.list_public(request.state.user_role, db))
+    request: Request,
+    q: str | None = None,
+    topic: str | None = None,
+    org_id: int | None = None,
+    sort_order: str = "asc",
+    page: int = 1,
+    limit: int = 10,
+    db: Session = Depends(get_db),
+) -> PaginatedAvailableSeriesResponse:
+    return _call(
+        lambda: StudentTestController.list_public(
+            user_role=request.state.user_role,
+            db=db,
+            q=q,
+            topic=topic,
+            org_id=org_id,
+            sort_order=sort_order,
+            page=page,
+            limit=limit,
+        )
+    )
+
 
 
 @router.post("/test-series/start", response_model=AttemptResponse, status_code=201)

@@ -3,6 +3,7 @@
 import hmac
 import json
 import hashlib
+import math
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
@@ -10,6 +11,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.models.question import Question
 from app.models.series_question import SeriesQuestion
+from app.models.topic import Topic
 from app.models.test_attempt import AttemptQuestion, TestAttempt
 from app.models.test_series import TestSeries
 from app.schemas.student_test import (
@@ -18,6 +20,7 @@ from app.schemas.student_test import (
     AttemptQuestionResponse,
     AttemptResponse,
     AvailableSeriesResponse,
+    PaginatedAvailableSeriesResponse,
     StartAttemptRequest,
 )
 
@@ -32,10 +35,20 @@ class StudentTestValidationError(Exception):
 
 class StudentTestController:
     @staticmethod
-    def list_public(user_role: int, db: Session) -> list[AvailableSeriesResponse]:
+    def list_public(
+        user_role: int,
+        db: Session,
+        q: str | None = None,
+        topic: str | None = None,
+        org_id: int | None = None,
+        sort_order: str = "asc",
+        page: int = 1,
+        limit: int = 10,
+    ) -> PaginatedAvailableSeriesResponse:
         StudentTestController._require_student(user_role)
         now = datetime.now(timezone.utc)
-        items = (
+
+        query = (
             db.query(TestSeries)
             .options(
                 joinedload(TestSeries.series_questions)
@@ -47,9 +60,44 @@ class StudentTestController:
                 TestSeries.is_active.is_(True),
                 TestSeries.valid_until > now,
             )
-            .order_by(TestSeries.valid_until)
-            .all()
         )
+
+        if org_id is not None and org_id >= 0:
+            query = query.filter(TestSeries.org_id == org_id)
+
+        if topic and topic.strip():
+            query = query.filter(
+                TestSeries.series_questions.any(
+                    SeriesQuestion.question.has(
+                        Question.topic.has(Topic.name == topic.strip())
+                    )
+                )
+            )
+
+        if q and q.strip():
+            term = f"%{q.strip()}%"
+            query = query.filter(
+                (TestSeries.name.ilike(term))
+                | (
+                    TestSeries.series_questions.any(
+                        SeriesQuestion.question.has(
+                            Question.topic.has(Topic.name.ilike(term))
+                        )
+                    )
+                )
+            )
+
+        if sort_order == "desc":
+            query = query.order_by(TestSeries.name.desc())
+        else:
+            query = query.order_by(TestSeries.name.asc())
+
+        total = query.count()
+        total_pages = math.ceil(total / limit) if limit > 0 else 1
+
+        offset = max(0, (page - 1) * limit)
+        items = query.offset(offset).limit(limit).all()
+
         results = []
         for item in items:
             topic_names = sorted(
@@ -72,7 +120,15 @@ class StudentTestController:
                     topics=topic_names,
                 )
             )
-        return results
+
+        return PaginatedAvailableSeriesResponse(
+            items=results,
+            total=total,
+            page=page,
+            limit=limit,
+            total_pages=total_pages,
+        )
+
 
 
     @staticmethod
