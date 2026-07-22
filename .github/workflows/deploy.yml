@@ -36,3 +36,34 @@ jobs:
             systemctl is-active --quiet qmaster-api.service
 
             echo "Deployment completed"
+
+      - name: Telegram success notification
+        if: success()
+        run: |
+          curl -s -X POST \
+            "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+            -d chat_id="${{ secrets.TELEGRAM_CHAT_ID }}" \
+            --data-urlencode text="✅ QMaster API deployment successful
+
+Repository: ${{ github.repository }}
+Branch: ${{ github.ref_name }}
+By: ${{ github.actor }}
+Commit: ${{ github.event.head_commit.message }}
+
+Workflow:
+https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+      - name: Telegram failure notification
+        if: failure()
+        run: |
+          curl -s -X POST \
+            "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+            -d chat_id="${{ secrets.TELEGRAM_CHAT_ID }}" \
+            --data-urlencode text="❌ QMaster API deployment failed
+
+Repository: ${{ github.repository }}
+Branch: ${{ github.ref_name }}
+By: ${{ github.actor }}
+
+Workflow:
+https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
