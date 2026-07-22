@@ -1,0 +1,37 @@
+name: Deploy FastAPI
+
+on:
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: production-deployment
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy to VPS
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.SSH_PORT }}
+          script_stop: true
+          script: |
+            set -e
+
+            cd /var/www/api.qmaster
+
+            git fetch origin main
+            git reset --hard origin/main
+
+            /root/.local/bin/uv sync --frozen
+            sudo systemctl restart qmaster-api.service
+            sudo systemctl is-active --quiet qmaster-api.service
+
+            echo "Deployment completed"
