@@ -81,6 +81,32 @@ def add_organization_user(
         raise HTTPException(status_code=409, detail="User email already exists") from None
 
 
+@router.get(
+    "/{organization_id}/users",
+    response_model=list[UserResponse],
+    summary="Get users in an organization (member or superadmin only)",
+)
+def list_organization_users(
+    organization_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+) -> list[UserResponse]:
+    try:
+        return OrganizationController.get_users(
+            organization_id=organization_id,
+            actor_user_id=request.state.user_id,
+            actor_role=request.state.user_role,
+            db=db,
+        )
+    except OrganizationNotFoundError:
+        raise HTTPException(status_code=404, detail="Organization not found") from None
+    except OrganizationUserPermissionError:
+        raise HTTPException(
+            status_code=403,
+            detail="Only organization members or a superadmin can view users",
+        ) from None
+
+
 @router.patch(
     "/{organization_id}",
     response_model=OrganizationResponse,

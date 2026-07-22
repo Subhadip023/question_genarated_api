@@ -11,6 +11,7 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session, joinedload
 
 
+from app.models.organization_user import OrganizationUser
 from app.models.question import Question
 from app.models.series_question import SeriesQuestion
 from app.models.topic import Topic
@@ -337,12 +338,26 @@ class StudentTestController:
     @staticmethod
     def _owned_attempt(attempt_id, user_id, user_role, db):
         StudentTestController._require_student(user_role)
-        attempt = (
-            db.query(TestAttempt)
-            .options(joinedload(TestAttempt.questions))
-            .filter(TestAttempt.id == attempt_id, TestAttempt.user_id == user_id)
-            .first()
-        )
+        query = db.query(TestAttempt).options(joinedload(TestAttempt.questions))
+        if user_role == 3:
+            # Student: must own the attempt
+            attempt = query.filter(TestAttempt.id == attempt_id, TestAttempt.user_id == user_id).first()
+        else:
+            # Staff (Super Admin = 0, Admin = 1, Teacher = 2): can view student attempts in their scope
+            attempt = query.filter(TestAttempt.id == attempt_id).first()
+            if attempt and user_role in (1, 2):
+                series = db.query(TestSeries).filter(TestSeries.id == attempt.series_id).first()
+                if series:
+                    membership = (
+                        db.query(OrganizationUser)
+                        .filter(OrganizationUser.user_id == user_id)
+                        .order_by(OrganizationUser.org_id)
+                        .first()
+                    )
+                    user_org_id = membership.org_id if membership else None
+                    if series.created_by != user_id and (user_org_id is None or series.org_id != user_org_id):
+                        attempt = None
+
         if attempt is None:
             raise StudentTestValidationError("Attempt not found")
         return attempt

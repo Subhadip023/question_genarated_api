@@ -168,6 +168,42 @@ class OrganizationController:
         return UserResponse.model_validate(user)
 
     @staticmethod
+    def get_users(
+        organization_id: int,
+        actor_user_id: int,
+        actor_role: int,
+        db: Session,
+    ) -> list[UserResponse]:
+        """Get all users belonging to an organization."""
+        organization = db.query(Organization.id).filter(
+            Organization.id == organization_id
+        ).first()
+        if organization is None:
+            raise OrganizationNotFoundError
+
+        if actor_role != 0:
+            is_member = (
+                db.query(OrganizationUser)
+                .filter(
+                    OrganizationUser.org_id == organization_id,
+                    OrganizationUser.user_id == actor_user_id,
+                )
+                .first()
+                is not None
+            )
+            if not is_member:
+                raise OrganizationUserPermissionError
+
+        users = (
+            db.query(User)
+            .join(OrganizationUser, OrganizationUser.user_id == User.id)
+            .filter(OrganizationUser.org_id == organization_id)
+            .order_by(User.role, User.id)
+            .all()
+        )
+        return [UserResponse.model_validate(u) for u in users]
+
+    @staticmethod
     def update_organization(
         organization_id: int, data: OrganizationUpdate, db: Session
     ) -> OrganizationResponse | None:
