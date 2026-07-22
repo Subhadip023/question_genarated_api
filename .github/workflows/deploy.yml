@@ -21,7 +21,7 @@ jobs:
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: ${{ secrets.SSH_PORT }}
-          script_stop: true
+          command_timeout: 10m
           script: |
             set -e
 
@@ -31,7 +31,8 @@ jobs:
             git reset --hard origin/main
 
             /root/.local/bin/uv sync --frozen
-            sudo systemctl restart qmaster-api.service
-            sudo systemctl is-active --quiet qmaster-api.service
+
+            systemctl restart qmaster-api.service
+            systemctl is-active --quiet qmaster-api.service
 
             echo "Deployment completed"
