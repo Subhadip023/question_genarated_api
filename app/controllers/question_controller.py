@@ -28,7 +28,7 @@ class QuestionController:
     @staticmethod
     def get_health() -> dict:
         """Return API health status."""
-        return {"status": "ok"}
+        return {"status": 1,"message": "Healthy"}
 
     @staticmethod
     def get_welcome() -> dict:
