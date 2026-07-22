@@ -68,6 +68,17 @@ def start_test(
     )
 
 
+@router.post("/attempts/{attempt_id}/start-timer", response_model=AttemptResponse)
+def start_timer(
+    attempt_id: int, request: Request, db: Session = Depends(get_db)
+) -> AttemptResponse:
+    return _call(
+        lambda: StudentTestController.start_timer(
+            attempt_id, request.state.user_id, request.state.user_role, db
+        )
+    )
+
+
 @router.put(
     "/attempts/{attempt_id}/questions/{attempt_question_id}",
     response_model=AttemptResponse,
