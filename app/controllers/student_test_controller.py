@@ -237,6 +237,29 @@ class StudentTestController:
         return StudentTestController.get_attempt(attempt.id, user_id, user_role, db)
 
     @staticmethod
+    def start_timer(
+        attempt_id: int, user_id: int, user_role: int, db: Session
+    ) -> AttemptResponse:
+        attempt = StudentTestController._owned_attempt(attempt_id, user_id, user_role, db)
+        if attempt.status != "in_progress":
+            raise StudentTestValidationError("Attempt is no longer in progress")
+
+        # Reset start time only if no answers have been saved yet (initial entrance into exam)
+        has_answers = any(q.selected_option_id is not None for q in attempt.questions)
+        if not has_answers:
+            series = db.query(TestSeries).filter(TestSeries.id == attempt.series_id).first()
+            if series:
+                now = datetime.now(timezone.utc)
+                attempt.started_at = now
+                attempt.expires_at = min(
+                    now + timedelta(seconds=series.duration_seconds),
+                    StudentTestController._as_utc(series.valid_until),
+                )
+                db.commit()
+
+        return StudentTestController.get_attempt(attempt.id, user_id, user_role, db)
+
+    @staticmethod
     def save_answer(
         attempt_id: int,
         attempt_question_id: int,
