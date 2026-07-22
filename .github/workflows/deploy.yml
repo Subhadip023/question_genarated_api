@@ -45,13 +45,13 @@ jobs:
             -d chat_id="${{ secrets.TELEGRAM_CHAT_ID }}" \
             --data-urlencode text="✅ QMaster API deployment successful
 
-Repository: ${{ github.repository }}
-Branch: ${{ github.ref_name }}
-By: ${{ github.actor }}
-Commit: ${{ github.event.head_commit.message }}
+          Repository: ${{ github.repository }}
+          Branch: ${{ github.ref_name }}
+          By: ${{ github.actor }}
+          Commit: ${{ github.event.head_commit.message }}
 
-Workflow:
-https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          Workflow:
+          https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
 
       - name: Telegram failure notification
         if: failure()
@@ -61,9 +61,9 @@ https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
             -d chat_id="${{ secrets.TELEGRAM_CHAT_ID }}" \
             --data-urlencode text="❌ QMaster API deployment failed
 
-Repository: ${{ github.repository }}
-Branch: ${{ github.ref_name }}
-By: ${{ github.actor }}
+          Repository: ${{ github.repository }}
+          Branch: ${{ github.ref_name }}
+          By: ${{ github.actor }}
 
-Workflow:
-https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          Workflow:
+          https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
