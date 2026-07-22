@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.controllers.test_series_controller import (
     TestSeriesController,
+    TestSeriesHasAttemptsError,
     TestSeriesPermissionError,
     TestSeriesQuestionError,
 )
@@ -91,3 +92,15 @@ def update_test_series(
     except TestSeriesQuestionError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from None
 
+
+@router.delete("/{series_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_test_series(
+    series_id: int, request: Request, db: Session = Depends(get_db)
+) -> None:
+    try:
+        if not TestSeriesController.delete(series_id, request.state.user_id, db):
+            raise HTTPException(status_code=404, detail="Test series not found")
+    except TestSeriesPermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from None
+    except TestSeriesHasAttemptsError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from None

@@ -32,6 +32,10 @@ class TestSeriesQuestionError(Exception):
     pass
 
 
+class TestSeriesHasAttemptsError(Exception):
+    pass
+
+
 class TestSeriesController:
     @staticmethod
     def create(
@@ -176,6 +180,36 @@ class TestSeriesController:
         if invite_token:
             response.invite_token = invite_token
         return response
+
+    @staticmethod
+    def delete(series_id: int, user_id: int, db: Session) -> bool:
+        series = db.query(TestSeries).filter(TestSeries.id == series_id).first()
+        if series is None:
+            return False
+
+        if series.created_by != user_id:
+            raise TestSeriesPermissionError(
+                "Only the user who created this test series can delete it"
+            )
+
+        has_attempts = (
+            db.query(TestAttempt.id)
+            .filter(TestAttempt.series_id == series_id)
+            .first()
+            is not None
+        )
+        if has_attempts:
+            raise TestSeriesHasAttemptsError(
+                "Test series with existing attempts cannot be deleted"
+            )
+
+        try:
+            db.delete(series)
+            db.commit()
+        except Exception:
+            db.rollback()
+            raise
+        return True
 
     @staticmethod
     def list_for_user(user_id: int, user_role: int, db: Session) -> list[TestSeriesResponse]:
