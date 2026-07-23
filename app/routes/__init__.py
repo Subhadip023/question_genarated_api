@@ -2,6 +2,7 @@
 
 from app.routes import (
     auth_routes,
+    diagram_routes,
     health_routes,
     mail_routes,
     organization_routes,
@@ -15,6 +16,7 @@ from app.routes import (
 
 __all__ = [
     "auth_routes",
+    "diagram_routes",
     "health_routes",
     "mail_routes",
     "organization_routes",
