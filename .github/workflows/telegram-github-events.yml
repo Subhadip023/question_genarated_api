@@ -1,0 +1,165 @@
+name: Telegram GitHub Notifications
+
+on:
+  issues:
+    types:
+      - opened
+      - assigned
+      - closed
+
+  pull_request:
+    types:
+      - opened
+      - closed
+      - review_requested
+
+jobs:
+  issue-opened:
+    if: github.event_name == 'issues' && github.event.action == 'opened'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Send issue opened notification
+        run: |
+          curl --fail --silent --show-error \
+            -X POST \
+            "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+            -d chat_id="${{ secrets.TELEGRAM_CHAT_ID }}" \
+            --data-urlencode "text=📌 New GitHub Issue
+
+          Repository: ${{ github.repository }}
+          Issue: #${{ github.event.issue.number }}
+          Title: ${{ github.event.issue.title }}
+          Created by: ${{ github.event.issue.user.login }}
+
+          ${{ github.event.issue.html_url }}"
+
+  issue-assigned:
+    if: github.event_name == 'issues' && github.event.action == 'assigned'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Send issue assigned notification
+        run: |
+          curl --fail --silent --show-error \
+            -X POST \
+            "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+            -d chat_id="${{ secrets.TELEGRAM_CHAT_ID }}" \
+            --data-urlencode "text=👨‍💻 Issue Assigned
+
+          Repository: ${{ github.repository }}
+          Issue: #${{ github.event.issue.number }}
+          Title: ${{ github.event.issue.title }}
+          Assigned to: ${{ github.event.assignee.login }}
+
+          ${{ github.event.issue.html_url }}"
+
+  issue-closed:
+    if: github.event_name == 'issues' && github.event.action == 'closed'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Send issue closed notification
+        run: |
+          curl --fail --silent --show-error \
+            -X POST \
+            "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+            -d chat_id="${{ secrets.TELEGRAM_CHAT_ID }}" \
+            --data-urlencode "text=✅ Issue Closed
+
+          Repository: ${{ github.repository }}
+          Issue: #${{ github.event.issue.number }}
+          Title: ${{ github.event.issue.title }}
+          Closed by: ${{ github.actor }}
+
+          ${{ github.event.issue.html_url }}"
+
+  pull-request-opened:
+    if: github.event_name == 'pull_request' && github.event.action == 'opened'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Send PR opened notification
+        run: |
+          curl --fail --silent --show-error \
+            -X POST \
+            "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+            -d chat_id="${{ secrets.TELEGRAM_CHAT_ID }}" \
+            --data-urlencode "text=🔀 Pull Request Opened
+
+          Repository: ${{ github.repository }}
+          PR: #${{ github.event.pull_request.number }}
+          Title: ${{ github.event.pull_request.title }}
+          Author: ${{ github.event.pull_request.user.login }}
+          Branch: ${{ github.event.pull_request.head.ref }} → ${{ github.event.pull_request.base.ref }}
+
+          ${{ github.event.pull_request.html_url }}"
+
+  review-requested:
+    if: github.event_name == 'pull_request' && github.event.action == 'review_requested'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Send review requested notification
+        run: |
+          curl --fail --silent --show-error \
+            -X POST \
+            "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+            -d chat_id="${{ secrets.TELEGRAM_CHAT_ID }}" \
+            --data-urlencode "text=👀 Pull Request Review Requested
+
+          Repository: ${{ github.repository }}
+          PR: #${{ github.event.pull_request.number }}
+          Title: ${{ github.event.pull_request.title }}
+          Reviewer: ${{ github.event.requested_reviewer.login }}
+          Requested by: ${{ github.actor }}
+
+          ${{ github.event.pull_request.html_url }}"
+
+  pull-request-merged:
+    if: >
+      github.event_name == 'pull_request' &&
+      github.event.action == 'closed' &&
+      github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Send PR merged notification
+        run: |
+          curl --fail --silent --show-error \
+            -X POST \
+            "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+            -d chat_id="${{ secrets.TELEGRAM_CHAT_ID }}" \
+            --data-urlencode "text=✅ Pull Request Merged
+
+          Repository: ${{ github.repository }}
+          PR: #${{ github.event.pull_request.number }}
+          Title: ${{ github.event.pull_request.title }}
+          Author: ${{ github.event.pull_request.user.login }}
+          Merged by: ${{ github.event.pull_request.merged_by.login }}
+          Branch: ${{ github.event.pull_request.head.ref }} → ${{ github.event.pull_request.base.ref }}
+
+          ${{ github.event.pull_request.html_url }}"
+
+  pull-request-closed:
+    if: >
+      github.event_name == 'pull_request' &&
+      github.event.action == 'closed' &&
+      github.event.pull_request.merged == false
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Send PR closed notification
+        run: |
+          curl --fail --silent --show-error \
+            -X POST \
+            "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+            -d chat_id="${{ secrets.TELEGRAM_CHAT_ID }}" \
+            --data-urlencode "text=❌ Pull Request Closed Without Merge
+
+          Repository: ${{ github.repository }}
+          PR: #${{ github.event.pull_request.number }}
+          Title: ${{ github.event.pull_request.title }}
+          Closed by: ${{ github.actor }}
+
+          ${{ github.event.pull_request.html_url }}"
