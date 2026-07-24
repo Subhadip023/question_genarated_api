@@ -127,7 +127,7 @@ class OrganizationController:
         db: Session,
     ) -> UserResponse:
         """Create a user and add them to an organization."""
-        organization = db.query(Organization.id).filter(
+        organization = db.query(Organization).filter(
             Organization.id == organization_id
         ).first()
         if organization is None:
@@ -165,6 +165,34 @@ class OrganizationController:
         except Exception:
             db.rollback()
             raise
+
+        role_name = {1: "Administrator", 2: "Teacher", 3: "Student"}.get(
+            user.role, "Member"
+        )
+        try:
+            MailService.send_mail(
+                to_email=user.email,
+                subject=f"Welcome to {organization.name} on QMaster",
+                body=(
+                    f"Hello {user.name},\n\n"
+                    f"You have been added to {organization.name} as a {role_name}.\n\n"
+                    f"Email: {user.email}\n"
+                    f"Temporary password: {data.password}\n\n"
+                    f"Login: {settings.app_url.rstrip('/')}/login\n"
+                    f"Reset password: {settings.app_url.rstrip('/')}/reset-password\n\n"
+                    "First log in with the temporary password, then use the reset "
+                    "password link and enter the temporary password as your current "
+                    "password.\n\n"
+                    "For security, please change your password after your first login."
+                ),
+            )
+        except MailServiceError as exc:
+            logger.warning(
+                "Organization member %s was created, but the welcome email failed: %s",
+                user.email,
+                exc,
+            )
+
         return UserResponse.model_validate(user)
 
     @staticmethod
