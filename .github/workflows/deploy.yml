@@ -30,7 +30,7 @@ jobs:
             git fetch origin main
             git reset --hard origin/main
 
-            /root/.local/bin/uv sync --frozen
+            /root/.local/bin/uv sync 
             /root/.local/bin/uv run alembic upgrade head
 
             systemctl restart qmaster-api.service
