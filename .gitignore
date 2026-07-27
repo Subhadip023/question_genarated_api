@@ -9,3 +9,8 @@ wheels/
 # Virtual environments
 .venv
 .env
+
+# Local storage and lockfiles
+uploads/
+uv.lock
+scratch

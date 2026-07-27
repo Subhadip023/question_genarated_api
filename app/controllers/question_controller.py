@@ -6,9 +6,11 @@ This acts as the Controller (C) layer in MVC.
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
+from app.models.diagram import Diagram
 from app.models.question import Question
 from app.models.question_option import QuestionOption
 from app.models.organization_user import OrganizationUser
+from app.schemas.diagram import DiagramResponse
 from app.schemas.question import (
     BulkQuestionCreate,
     PaginatedQuestionResponse,
@@ -92,7 +94,44 @@ class QuestionController:
             .filter(Question.id == question.id)
             .first()
         )
-        return QuestionResponse.model_validate(question)
+        return QuestionController._build_question_response(question, db)
+
+    @staticmethod
+    def _build_question_response(question: Question, db: Session) -> QuestionResponse:
+        """Attach diagrams list, diagram_id, and diagram_path to QuestionResponse, and populate option diagrams."""
+        response = QuestionResponse.model_validate(question)
+        diagrams = (
+            db.query(Diagram)
+            .filter(Diagram.type == 0, Diagram.ref_id == question.id)
+            .order_by(Diagram.id.asc())
+            .all()
+        )
+        if diagrams:
+            response.diagrams = [DiagramResponse.model_validate(d) for d in diagrams]
+            latest = diagrams[-1]
+            response.diagram_id = latest.id
+            response.diagram_path = latest.path
+
+        # Option diagrams (type = 1)
+        option_ids = [opt.id for opt in question.options if opt.id]
+        if option_ids:
+            opt_diagrams = (
+                db.query(Diagram)
+                .filter(Diagram.type == 1, Diagram.ref_id.in_(option_ids))
+                .order_by(Diagram.id.desc())
+                .all()
+            )
+            opt_diag_map = {}
+            for d in opt_diagrams:
+                if d.ref_id not in opt_diag_map:
+                    opt_diag_map[d.ref_id] = d
+            for opt_res in response.options:
+                if opt_res.id in opt_diag_map:
+                    d = opt_diag_map[opt_res.id]
+                    opt_res.diagram_id = d.id
+                    opt_res.diagram_path = d.path
+
+        return response
 
     @staticmethod
     def create_questions_bulk(
@@ -139,7 +178,7 @@ class QuestionController:
         )
         created_by_id = {question.id: question for question in created}
         return [
-            QuestionResponse.model_validate(created_by_id[question_id])
+            QuestionController._build_question_response(created_by_id[question_id], db)
             for question_id in question_ids
         ]
 
@@ -189,8 +228,51 @@ class QuestionController:
             .limit(page_size)
             .all()
         )
+
+        question_ids = [q.id for q in questions]
+        diagrams_map: dict[int, list[DiagramResponse]] = {}
+        if question_ids:
+            diagrams = (
+                db.query(Diagram)
+                .filter(Diagram.type == 0, Diagram.ref_id.in_(question_ids))
+                .order_by(Diagram.id.asc())
+                .all()
+            )
+            for d in diagrams:
+                if d.ref_id not in diagrams_map:
+                    diagrams_map[d.ref_id] = []
+                diagrams_map[d.ref_id].append(DiagramResponse.model_validate(d))
+
+        all_option_ids = [opt.id for q in questions for opt in q.options if opt.id]
+        opt_diag_map = {}
+        if all_option_ids:
+            opt_diagrams = (
+                db.query(Diagram)
+                .filter(Diagram.type == 1, Diagram.ref_id.in_(all_option_ids))
+                .order_by(Diagram.id.desc())
+                .all()
+            )
+            for d in opt_diagrams:
+                if d.ref_id not in opt_diag_map:
+                    opt_diag_map[d.ref_id] = d
+
+        items = []
+        for q in questions:
+            res = QuestionResponse.model_validate(q)
+            if q.id in diagrams_map:
+                res.diagrams = diagrams_map[q.id]
+                latest = diagrams_map[q.id][-1]
+                res.diagram_id = latest.id
+                res.diagram_path = latest.path
+            for opt_res in res.options:
+                if opt_res.id in opt_diag_map:
+                    d = opt_diag_map[opt_res.id]
+                    opt_res.diagram_id = d.id
+                    opt_res.diagram_path = d.path
+            items.append(res)
+
         return PaginatedQuestionResponse(
-            items=[QuestionResponse.model_validate(question) for question in questions],
+            items=items,
             total=total,
             page=page,
             page_size=page_size,
@@ -216,7 +298,7 @@ class QuestionController:
         question = query.first()
         if not question:
             return None
-        return QuestionResponse.model_validate(question)
+        return QuestionController._build_question_response(question, db)
 
     @staticmethod
     def _apply_visibility_filter(query, user_id: int, user_role: int, db: Session):
@@ -274,7 +356,7 @@ class QuestionController:
             .filter(Question.id == question_id)
             .first()
         )
-        return QuestionResponse.model_validate(question)
+        return QuestionController._build_question_response(question, db)
 
     @staticmethod
     def delete_question(question_id: int, db: Session) -> bool:

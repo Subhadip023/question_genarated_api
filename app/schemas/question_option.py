@@ -13,5 +13,7 @@ class OptionResponse(BaseModel):
     q_id: int
     ans: str
     is_correct: bool
+    diagram_id: int | None = None
+    diagram_path: str | None = None
 
     model_config = {"from_attributes": True}

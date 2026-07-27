@@ -1,6 +1,7 @@
 from pydantic import BaseModel, Field, model_validator
 from datetime import datetime
 from decimal import Decimal
+from app.schemas.diagram import DiagramResponse
 from app.schemas.question_option import OptionResponse, OptionCreate
 from app.schemas.topic import TopicResponse
 
@@ -61,6 +62,9 @@ class QuestionResponse(BaseModel):
     topic_id: int | None = None
     topic: TopicResponse | None = None
     options: list[OptionResponse] = Field(default_factory=list)
+    diagram_id: int | None = None
+    diagram_path: str | None = None
+    diagrams: list[DiagramResponse] = Field(default_factory=list)
 
     model_config = {"from_attributes": True}
 
