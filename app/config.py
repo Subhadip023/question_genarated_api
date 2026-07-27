@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     auth_secret_key: str = "change-this-secret-in-production"
     auth_token_expire_hours: int = 24
     app_url: str = "http://localhost:3000"
+    upload_dir: str = "uploads"
 
     # SMTP Email Settings (optional, configured via .env)
     smtp_host: str = "smtp.gmail.com"

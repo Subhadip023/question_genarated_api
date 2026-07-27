@@ -4,11 +4,14 @@ Wires FastAPI app with all routers following MVC structure.
 """
 
 import logging
+import os
 import traceback
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 
+from app.config import settings
 from app.middleware.auth_middleware import AuthMiddleware
 from app.middleware.organization_permission_middleware import (
     OrganizationPermissionMiddleware,
@@ -29,7 +32,7 @@ from app.routes import (
 
 # Configure logging so errors print to console with full tracebacks
 logging.basicConfig(
-    level=logging.DEBUG,
+    level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
 )
 logger = logging.getLogger(__name__)
@@ -39,6 +42,10 @@ app = FastAPI(
     description="A FastAPI application structured using MVC (Model-View-Controller).",
     version="0.1.0",
 )
+
+# Ensure upload directory exists and mount static files route
+os.makedirs(settings.upload_dir, exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=settings.upload_dir), name="uploads")
 
 # Starlette executes the last registered middleware first. Authentication must
 # populate request.state before organization permissions are checked.

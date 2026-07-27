@@ -15,11 +15,7 @@ class Diagram(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True, autoincrement=True)
     type: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     ref_id: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    org_id: Mapped[int] = mapped_column(
-        Integer,
-        ForeignKey("organizations.id"),
-        nullable=False,
-    )
+    org_id: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     user_id: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     path: Mapped[str] = mapped_column(String(length=1024), nullable=False)
 
