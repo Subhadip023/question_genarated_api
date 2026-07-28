@@ -50,7 +50,7 @@ class FileService:
             category = "question"
 
         subfolder = f"diagrams/{category}"
-        return FileService.upload_image(source=file, subfolder=subfolder
+        return FileService.upload_image(source=file, subfolder=subfolder)
 
     @staticmethod
     def store_image(
