@@ -3,6 +3,7 @@ import time
 import uuid
 from pathlib import Path
 from fastapi import HTTPException, UploadFile, status
+from starlette.datastructures import UploadFile as StarletteUploadFile
 
 from app.config import settings
 
@@ -49,7 +50,7 @@ class FileService:
             category = "question"
 
         subfolder = f"diagrams/{category}"
-        return FileService.upload_image(source=file, subfolder=subfolder)
+        return FileService.upload_image(source=file, subfolder=subfolder
 
     @staticmethod
     def store_image(
@@ -83,7 +84,10 @@ class FileService:
         Returns:
             Relative path string formatted with forward slashes (e.g., 'uploads/images/uuid_timestamp.png').
         """
-        if isinstance(source, UploadFile):
+        # FastAPI injects Starlette's base UploadFile object at runtime. Checking
+        # only FastAPI's subclass can therefore misclassify a valid upload as a
+        # filesystem path and cause Path(source) to raise TypeError.
+        if isinstance(source, StarletteUploadFile):
             filename = source.filename
             if not filename:
                 raise HTTPException(
