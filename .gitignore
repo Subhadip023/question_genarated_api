@@ -14,3 +14,6 @@ wheels/
 uploads/
 uv.lock
 scratch
+
+.postman/
+postman/

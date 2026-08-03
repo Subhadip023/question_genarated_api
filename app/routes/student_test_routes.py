@@ -45,6 +45,7 @@ def list_public_tests(
     return _call(
         lambda: StudentTestController.list_public(
             user_role=request.state.user_role,
+            user_id=request.state.user_id,
             db=db,
             q=q,
             topic=topic,

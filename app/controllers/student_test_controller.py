@@ -40,6 +40,7 @@ class StudentTestController:
     @staticmethod
     def list_public(
         user_role: int,
+        user_id: int,
         db: Session,
         q: str | None = None,
         topic: str | None = None,
@@ -62,6 +63,12 @@ class StudentTestController:
                 TestSeries.access_type == "public",
                 TestSeries.is_active.is_(True),
                 TestSeries.valid_until > now,
+                ~db.query(TestAttempt)
+                .filter(
+                    TestAttempt.series_id == TestSeries.id,
+                    TestAttempt.user_id == user_id,
+                )
+                .exists(),
             )
         )
 
