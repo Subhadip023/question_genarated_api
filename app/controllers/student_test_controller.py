@@ -374,28 +374,62 @@ class StudentTestController:
     @staticmethod
     def _owned_attempt(attempt_id, user_id, user_role, db):
         StudentTestController._require_student(user_role)
-        query = db.query(TestAttempt).options(joinedload(TestAttempt.questions))
+
+        query = db.query(TestAttempt).options(
+            joinedload(TestAttempt.questions)
+        )
+
+        # Student (role 3): only their own attempts
         if user_role == 3:
-            # Student: must own the attempt
-            attempt = query.filter(TestAttempt.id == attempt_id, TestAttempt.user_id == user_id).first()
-        else:
-            # Staff (Super Admin = 0, Admin = 1, Teacher = 2): can view student attempts in their scope
-            attempt = query.filter(TestAttempt.id == attempt_id).first()
-            if attempt and user_role in (1, 2):
-                series = db.query(TestSeries).filter(TestSeries.id == attempt.series_id).first()
+            attempt = query.filter(
+                TestAttempt.id == attempt_id,
+                TestAttempt.user_id == user_id
+            ).first()
+
+        # Super Admin (role 0): can see all attempts
+        elif user_role == 0:
+            attempt = query.filter(
+                TestAttempt.id == attempt_id
+            ).first()
+
+        # Admin / Teacher (role 1,2): only allowed scope
+        elif user_role in (1, 2):
+            attempt = query.filter(
+                TestAttempt.id == attempt_id
+            ).first()
+
+            if attempt:
+                series = (
+                    db.query(TestSeries)
+                    .filter(TestSeries.id == attempt.series_id)
+                    .first()
+                )
+
                 if series:
                     membership = (
                         db.query(OrganizationUser)
-                        .filter(OrganizationUser.user_id == user_id)
-                        .order_by(OrganizationUser.org_id)
+                        .filter(
+                            OrganizationUser.user_id == user_id
+                        )
                         .first()
                     )
+
                     user_org_id = membership.org_id if membership else None
-                    if series.created_by != user_id and (user_org_id is None or series.org_id != user_org_id):
+
+                    if (
+                        series.created_by != user_id
+                        and (
+                            user_org_id is None
+                            or series.org_id != user_org_id
+                        )
+                    ):
                         attempt = None
+        else:
+            attempt = None
 
         if attempt is None:
             raise StudentTestValidationError("Attempt not found")
+
         return attempt
 
     @staticmethod
