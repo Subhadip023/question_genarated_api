@@ -16,6 +16,7 @@ from app.schemas.student_test import (
     PaginatedAvailableSeriesResponse,
     SaveAnswerRequest,
     StartAttemptRequest,
+    SubmitAttemptRequest,
 )
 
 
@@ -69,15 +70,15 @@ def start_test(
     )
 
 
-@router.post("/attempts/{attempt_id}/start-timer", response_model=AttemptResponse)
-def start_timer(
-    attempt_id: int, request: Request, db: Session = Depends(get_db)
-) -> AttemptResponse:
-    return _call(
-        lambda: StudentTestController.start_timer(
-            attempt_id, request.state.user_id, request.state.user_role, db
-        )
-    )
+# @router.post("/attempts/{attempt_id}/start-timer", response_model=AttemptResponse)
+# def start_timer(
+#     attempt_id: int, request: Request, db: Session = Depends(get_db)
+# ) -> AttemptResponse:
+#     return _call(
+#         lambda: StudentTestController.start_timer(
+#             attempt_id, request.state.user_id, request.state.user_role, db
+#         )
+#     )
 
 
 @router.put(
@@ -105,11 +106,18 @@ def save_answer(
 
 @router.post("/attempts/{attempt_id}/submit", response_model=AttemptResponse)
 def submit_attempt(
-    attempt_id: int, request: Request, db: Session = Depends(get_db)
+    attempt_id: int,
+    data: SubmitAttemptRequest,
+    request: Request,
+    db: Session = Depends(get_db),
 ) -> AttemptResponse:
     return _call(
         lambda: StudentTestController.submit(
-            attempt_id, request.state.user_id, request.state.user_role, db
+            attempt_id,
+            data,
+            request.state.user_id,
+            request.state.user_role,
+            db,
         )
     )
 

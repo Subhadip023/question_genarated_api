@@ -5,7 +5,7 @@ from decimal import Decimal
 
 from sqlalchemy import DateTime, ForeignKey, Integer, Numeric, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-
+from app.constants.attempt_status import AttemptStatus
 from app.database import Base
 
 
@@ -22,7 +22,7 @@ class TestAttempt(Base):
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     submitted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    status: Mapped[str] = mapped_column(String(20), default="in_progress", nullable=False)
+    status: Mapped[str] = mapped_column(Integer, default=AttemptStatus.IN_PROGRESS, nullable=False)
     score: Mapped[Decimal] = mapped_column(Numeric(10, 2), default=0, nullable=False)
     total_marks: Mapped[Decimal] = mapped_column(Numeric(10, 2), default=0, nullable=False)
 

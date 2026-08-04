@@ -29,6 +29,7 @@ class PaginatedAvailableSeriesResponse(BaseModel):
 class StartAttemptRequest(BaseModel):
     series_id: int | None = None
     invite_token: str | None = Field(default=None, min_length=8, max_length=255)
+    start_test: int = 0
 
     @model_validator(mode="after")
     def require_series_or_code(self):
@@ -62,7 +63,7 @@ class AttemptResponse(BaseModel):
     started_at: datetime
     expires_at: datetime
     submitted_at: datetime | None
-    status: str
+    status: int
     score: Decimal
     total_marks: Decimal
     questions: list[AttemptQuestionResponse]
@@ -79,6 +80,9 @@ class AttemptHistoryResponse(BaseModel):
     started_at: datetime
     expires_at: datetime
     submitted_at: datetime | None
-    status: str
+    status: int
     score: Decimal
     total_marks: Decimal
+
+class SubmitAttemptRequest(BaseModel):
+    force_submit: int = 0
