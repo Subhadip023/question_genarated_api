@@ -9,7 +9,7 @@ from decimal import Decimal
 
 from sqlalchemy import or_
 from sqlalchemy.orm import Session, joinedload
-
+from app.constants.attempt_status import AttemptStatus
 
 from app.models.organization_user import OrganizationUser
 from app.models.question import Question
@@ -185,7 +185,7 @@ class StudentTestController:
         if existing is not None:
             # Auto-expire if time ran out
             StudentTestController._mark_expired(existing, db)
-            if existing.status == "in_progress":
+            if existing.status == AttemptStatus.IN_PROGRESS:
                 # Resume the existing attempt
                 return StudentTestController.get_attempt(existing.id, user_id, user_role, db)
             # Already submitted or expired — do not allow a second attempt
@@ -232,6 +232,7 @@ class StudentTestController:
             user_id=user_id,
             started_at=now,
             expires_at=expires_at,
+            status=AttemptStatus.IN_PROGRESS,
             total_marks=total_marks,
             questions=snapshots,
         )
@@ -291,12 +292,12 @@ class StudentTestController:
 
     @staticmethod
     def submit(
-        attempt_id: int, user_id: int, user_role: int, db: Session
+        attempt_id: int, data: SubmitAttemptRequest, user_id: int, user_role: int, db: Session
     ) -> AttemptResponse:
         attempt = StudentTestController._owned_attempt(
             attempt_id, user_id, user_role, db
         )
-        if attempt.status != "in_progress":
+        if attempt.status != AttemptStatus.IN_PROGRESS:
             raise StudentTestValidationError(
                 "This attempt has already been submitted or has expired."
             )
@@ -313,9 +314,14 @@ class StudentTestController:
             score += awarded
         attempt.score = score
         attempt.submitted_at = now
-        attempt.status = (
-            "expired" if StudentTestController._as_utc(attempt.expires_at) <= now else "submitted"
-        )
+        if data.force_submit:
+            attempt.status = AttemptStatus.FORCE_SUBMITTED
+
+        elif StudentTestController._as_utc(attempt.expires_at) <= now:
+            attempt.status = AttemptStatus.EXPIRED
+
+        else:
+            attempt.status = AttemptStatus.SUBMITTED
         db.commit()
         return StudentTestController.get_attempt(attempt_id, user_id, user_role, db)
 
@@ -361,7 +367,7 @@ class StudentTestController:
     def _active_attempt(attempt_id, user_id, user_role, db):
         attempt = StudentTestController._owned_attempt(attempt_id, user_id, user_role, db)
         StudentTestController._mark_expired(attempt, db)
-        if attempt.status != "in_progress":
+        if attempt.status != AttemptStatus.IN_PROGRESS:
             raise StudentTestPermissionError("Attempt is no longer active")
         return attempt
 
@@ -394,11 +400,30 @@ class StudentTestController:
 
     @staticmethod
     def _mark_expired(attempt, db):
-        if (
-            attempt.status == "in_progress"
-            and StudentTestController._as_utc(attempt.expires_at) <= datetime.now(timezone.utc)
-        ):
-            attempt.status = "expired"
+
+        if attempt.status != AttemptStatus.IN_PROGRESS:
+            return
+
+        now = datetime.now(timezone.utc)
+
+        if StudentTestController._as_utc(attempt.expires_at) <= now:
+
+            score = Decimal("0")
+
+            for question in attempt.questions:
+                if (
+                    question.selected_option_id is not None
+                    and question.selected_option_id == question.correct_option_id
+                ):
+                    question.marks_awarded = question.marks
+                    score += question.marks
+                else:
+                    question.marks_awarded = Decimal("0")
+
+            attempt.score = score
+            attempt.submitted_at = now
+            attempt.status = AttemptStatus.EXPIRED
+
             db.commit()
 
     @staticmethod
@@ -426,7 +451,7 @@ class StudentTestController:
                         for option in json.loads(q.options_snapshot)
                     ],
                     selected_option_id=q.selected_option_id,
-                    correct_option_id=q.correct_option_id if attempt.status != "in_progress" else None,
+                    correct_option_id=q.correct_option_id if attempt.status != AttemptStatus.IN_PROGRESS else None,
                 )
                 for q in attempt.questions
             ],
