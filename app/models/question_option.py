@@ -22,7 +22,7 @@ class QuestionOption(Base):
     )
 
     # Option text — can contain HTML
-    ans: Mapped[str] = mapped_column(Text, nullable=False)
+    ans: Mapped[str] = mapped_column(Text, nullable=False, default="")
 
     # Only one option per question should have is_correct=True
     is_correct: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)

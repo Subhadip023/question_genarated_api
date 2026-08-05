@@ -12,6 +12,10 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.config import settings
+from app.database import Base, engine
+import app.models  # ensure models are registered
+Base.metadata.create_all(bind=engine)
+
 from app.middleware.auth_middleware import AuthMiddleware
 from app.middleware.organization_permission_middleware import (
     OrganizationPermissionMiddleware,
