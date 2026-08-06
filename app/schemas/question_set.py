@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-
+from typing import List
 
 class QuestionSetCreate(BaseModel):
 
@@ -21,3 +21,11 @@ class QuestionSetResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+class QuestionSetUpdate(BaseModel):
+    name: str
+    visibility: int
+    is_active: int
+
+class AddQuestionsRequest(BaseModel):
+    question_ids: List[int]
