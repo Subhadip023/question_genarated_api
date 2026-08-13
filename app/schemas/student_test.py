@@ -43,6 +43,7 @@ class StartAttemptRequest(BaseModel):
 class AttemptOptionResponse(BaseModel):
     id: int
     ans: str
+    diagram_path: str | None = None
 
 
 class AttemptQuestionResponse(BaseModel):
@@ -53,8 +54,7 @@ class AttemptQuestionResponse(BaseModel):
     marks: Decimal
     options: list[AttemptOptionResponse]
     selected_option_id: int | None
-    # Correct-answer information (correct_option_id / is_correct / marks_awarded)
-    # is deliberately excluded from every attempt response.
+    correct_option_id: int | None = None
 
 
 class AttemptResponse(BaseModel):

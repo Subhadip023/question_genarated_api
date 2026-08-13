@@ -547,6 +547,7 @@ class StudentTestController:
     @staticmethod
     def _serialize_attempt(attempt, db):
         series = db.query(TestSeries).filter(TestSeries.id == attempt.series_id).first()
+        is_done = attempt.status != AttemptStatus.IN_PROGRESS
         return AttemptResponse(
             id=attempt.id,
             series_id=attempt.series_id,
@@ -569,8 +570,7 @@ class StudentTestController:
                         for option in json.loads(q.options_snapshot)
                     ],
                     selected_option_id=q.selected_option_id,
-                    # Correct-answer information is intentionally never returned
-                    # to the client (see FRONTEND_API_GUIDE.txt).
+                    correct_option_id=q.correct_option_id if is_done else None,
                 )
                 for q in attempt.questions
             ],
