@@ -276,6 +276,20 @@ Request:
 The same endpoint can be called again to change the selected answer while the
 attempt is in progress. The full updated attempt is returned.
 
+Only the student who owns the attempt may save answers. Staff roles (0, 1, 2)
+can view an attempt but can never modify it.
+
+Possible responses:
+200 = Answer saved; full updated attempt returned
+400 = selected_option_id is not one of this question's options
+403 = Caller is not a student / not the owner of this attempt
+404 = Attempt does not exist, or the question does not belong to this attempt
+409 = Attempt is already submitted or expired (answers can no longer change)
+422 = Request body is malformed (e.g. selected_option_id missing or not an int)
+
+Correct-answer information (correct_option_id, is_correct, marks_awarded) is
+never present in any attempt response, before or after submission.
+
 
 3.6 Submit an attempt
 ---------------------

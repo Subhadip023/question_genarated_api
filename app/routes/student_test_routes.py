@@ -4,7 +4,9 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from app.controllers.student_test_controller import (
+    StudentTestConflictError,
     StudentTestController,
+    StudentTestNotFoundError,
     StudentTestPermissionError,
     StudentTestValidationError,
 )
@@ -26,6 +28,10 @@ router = APIRouter(prefix="/student", tags=["Student Tests"])
 def _call(action):
     try:
         return action()
+    except StudentTestNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from None
+    except StudentTestConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from None
     except StudentTestPermissionError as exc:
         raise HTTPException(status_code=403, detail=str(exc)) from None
     except StudentTestValidationError as exc:

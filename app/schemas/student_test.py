@@ -53,7 +53,8 @@ class AttemptQuestionResponse(BaseModel):
     marks: Decimal
     options: list[AttemptOptionResponse]
     selected_option_id: int | None
-    correct_option_id: int | None = None
+    # Correct-answer information (correct_option_id / is_correct / marks_awarded)
+    # is deliberately excluded from every attempt response.
 
 
 class AttemptResponse(BaseModel):

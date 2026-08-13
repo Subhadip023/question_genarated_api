@@ -25,15 +25,24 @@ from app.schemas.student_test import (
     AvailableSeriesResponse,
     PaginatedAvailableSeriesResponse,
     StartAttemptRequest,
+    SubmitAttemptRequest,
 )
 
 
 class StudentTestPermissionError(Exception):
-    pass
+    """Caller is authenticated but not allowed to perform this action (HTTP 403)."""
 
 
 class StudentTestValidationError(Exception):
-    pass
+    """Request is well-formed but semantically invalid, e.g. bad option (HTTP 400)."""
+
+
+class StudentTestNotFoundError(Exception):
+    """Requested attempt or attempt-question does not exist / is not visible (HTTP 404)."""
+
+
+class StudentTestConflictError(Exception):
+    """Attempt is in a state that forbids the change, e.g. submitted/expired (HTTP 409)."""
 
 
 class StudentTestController:
@@ -248,9 +257,11 @@ class StudentTestController:
     def start_timer(
         attempt_id: int, user_id: int, user_role: int, db: Session
     ) -> AttemptResponse:
-        attempt = StudentTestController._owned_attempt(attempt_id, user_id, user_role, db)
-        if attempt.status != "in_progress":
-            raise StudentTestValidationError("Attempt is no longer in progress")
+        attempt = StudentTestController._student_owned_attempt(
+            attempt_id, user_id, user_role, db
+        )
+        if attempt.status != AttemptStatus.IN_PROGRESS:
+            raise StudentTestConflictError("Attempt is no longer in progress")
 
         # Reset start time only if no answers have been saved yet (initial entrance into exam)
         has_answers = any(q.selected_option_id is not None for q in attempt.questions)
@@ -276,60 +287,89 @@ class StudentTestController:
         user_role: int,
         db: Session,
     ) -> AttemptResponse:
-        attempt = StudentTestController._active_attempt(
-            attempt_id, user_id, user_role, db
-        )
-        question = next((q for q in attempt.questions if q.id == attempt_question_id), None)
-        if question is None:
-            raise StudentTestValidationError("Question does not belong to this attempt")
-        options = json.loads(question.options_snapshot)
-        if selected_option_id not in {option["id"] for option in options}:
-            raise StudentTestValidationError("Selected option is invalid")
-        question.selected_option_id = selected_option_id
-        question.answered_at = datetime.now(timezone.utc)
-        db.commit()
+        try:
+            # Lock the attempt row for the duration of this transaction so a
+            # concurrent submit (or another save) cannot slip between the
+            # active-status check and the answer write. On engines without row
+            # locks (e.g. SQLite) this degrades to a no-op but the logic holds.
+            attempt = StudentTestController._student_owned_attempt(
+                attempt_id, user_id, user_role, db, lock=True
+            )
+            # Active-status + expiry check and the write happen atomically inside
+            # the same locked transaction.
+            StudentTestController._assert_active(attempt)
+
+            question = (
+                db.query(AttemptQuestion)
+                .filter(
+                    AttemptQuestion.id == attempt_question_id,
+                    AttemptQuestion.attempt_id == attempt.id,
+                )
+                .first()
+            )
+            if question is None:
+                raise StudentTestNotFoundError(
+                    "Question does not belong to this attempt"
+                )
+
+            options = json.loads(question.options_snapshot)
+            if selected_option_id not in {option["id"] for option in options}:
+                raise StudentTestValidationError("Selected option is invalid")
+
+            question.selected_option_id = selected_option_id
+            question.answered_at = datetime.now(timezone.utc)
+            db.commit()
+        except Exception:
+            db.rollback()
+            raise
         return StudentTestController.get_attempt(attempt_id, user_id, user_role, db)
 
     @staticmethod
     def submit(
         attempt_id: int, data: SubmitAttemptRequest, user_id: int, user_role: int, db: Session
     ) -> AttemptResponse:
-        attempt = StudentTestController._owned_attempt(
-            attempt_id, user_id, user_role, db
-        )
-        if attempt.status != AttemptStatus.IN_PROGRESS:
-            raise StudentTestValidationError(
-                "This attempt has already been submitted or has expired."
+        try:
+            # Same lock as save_answer: submit and answer-saving contend for the
+            # same attempt row, so exactly one of them can finalize the attempt.
+            attempt = StudentTestController._student_owned_attempt(
+                attempt_id, user_id, user_role, db, lock=True
             )
-        now = datetime.now(timezone.utc)
-        score = Decimal("0")
-        for question in attempt.questions:
-            awarded = (
-                question.marks
-                if question.selected_option_id is not None
-                and question.selected_option_id == question.correct_option_id
-                else Decimal("0")
-            )
-            question.marks_awarded = awarded
-            score += awarded
-        attempt.score = score
-        attempt.submitted_at = now
-        if data.force_submit:
-            attempt.status = AttemptStatus.FORCE_SUBMITTED
+            if attempt.status != AttemptStatus.IN_PROGRESS:
+                raise StudentTestConflictError(
+                    "This attempt has already been submitted or has expired."
+                )
+            now = datetime.now(timezone.utc)
+            score = Decimal("0")
+            for question in attempt.questions:
+                awarded = (
+                    question.marks
+                    if question.selected_option_id is not None
+                    and question.selected_option_id == question.correct_option_id
+                    else Decimal("0")
+                )
+                question.marks_awarded = awarded
+                score += awarded
+            attempt.score = score
+            attempt.submitted_at = now
+            if data.force_submit:
+                attempt.status = AttemptStatus.FORCE_SUBMITTED
 
-        elif StudentTestController._as_utc(attempt.expires_at) <= now:
-            attempt.status = AttemptStatus.EXPIRED
+            elif StudentTestController._as_utc(attempt.expires_at) <= now:
+                attempt.status = AttemptStatus.EXPIRED
 
-        else:
-            attempt.status = AttemptStatus.SUBMITTED
-        db.commit()
+            else:
+                attempt.status = AttemptStatus.SUBMITTED
+            db.commit()
+        except Exception:
+            db.rollback()
+            raise
         return StudentTestController.get_attempt(attempt_id, user_id, user_role, db)
 
     @staticmethod
     def get_attempt(
         attempt_id: int, user_id: int, user_role: int, db: Session
     ) -> AttemptResponse:
-        attempt = StudentTestController._owned_attempt(attempt_id, user_id, user_role, db)
+        attempt = StudentTestController._viewable_attempt(attempt_id, user_id, user_role, db)
         StudentTestController._mark_expired(attempt, db)
         return StudentTestController._serialize_attempt(attempt, db)
 
@@ -364,15 +404,56 @@ class StudentTestController:
         return result
 
     @staticmethod
-    def _active_attempt(attempt_id, user_id, user_role, db):
-        attempt = StudentTestController._owned_attempt(attempt_id, user_id, user_role, db)
-        StudentTestController._mark_expired(attempt, db)
+    def _assert_active(attempt):
+        """Reject a modification when the attempt is no longer accepting answers.
+
+        Kept side-effect free so it can be called inside a locked transaction:
+        the caller decides when (and whether) to commit a state change.
+        """
         if attempt.status != AttemptStatus.IN_PROGRESS:
-            raise StudentTestPermissionError("Attempt is no longer active")
+            raise StudentTestConflictError(
+                "This attempt has already been submitted or has expired."
+            )
+        now = datetime.now(timezone.utc)
+        if StudentTestController._as_utc(attempt.expires_at) <= now:
+            raise StudentTestConflictError(
+                "This attempt has expired and can no longer be modified."
+            )
+
+    @staticmethod
+    def _student_owned_attempt(attempt_id, user_id, user_role, db, *, lock=False):
+        """Authorize a *modification*: only the student (role 3) who owns the
+        attempt may save answers or submit. Staff roles are rejected outright.
+
+        - Non-student role  -> 403 (StudentTestPermissionError)
+        - No such attempt for this user -> 404 (StudentTestNotFoundError)
+        """
+        if user_role != 3:
+            raise StudentTestPermissionError(
+                "Only the student who owns this attempt can modify it"
+            )
+
+        query = db.query(TestAttempt).filter(
+            TestAttempt.id == attempt_id,
+            TestAttempt.user_id == user_id,
+        )
+        if lock:
+            # Serialize concurrent save/submit on the same attempt row. Ignored
+            # by engines without row-level locking (e.g. SQLite).
+            query = query.with_for_update()
+
+        attempt = query.first()
+        if attempt is None:
+            raise StudentTestNotFoundError("Attempt not found")
         return attempt
 
     @staticmethod
-    def _owned_attempt(attempt_id, user_id, user_role, db):
+    def _viewable_attempt(attempt_id, user_id, user_role, db):
+        """Authorize a *read*: the owning student, or staff within scope.
+
+        This is intentionally broader than :meth:`_student_owned_attempt` so that
+        staff can inspect attempts without ever being able to change them.
+        """
         StudentTestController._require_student(user_role)
 
         query = db.query(TestAttempt).options(
@@ -428,7 +509,7 @@ class StudentTestController:
             attempt = None
 
         if attempt is None:
-            raise StudentTestValidationError("Attempt not found")
+            raise StudentTestNotFoundError("Attempt not found")
 
         return attempt
 
@@ -485,7 +566,8 @@ class StudentTestController:
                         for option in json.loads(q.options_snapshot)
                     ],
                     selected_option_id=q.selected_option_id,
-                    correct_option_id=q.correct_option_id if attempt.status != AttemptStatus.IN_PROGRESS else None,
+                    # Correct-answer information is intentionally never returned
+                    # to the client (see FRONTEND_API_GUIDE.txt).
                 )
                 for q in attempt.questions
             ],
