@@ -217,7 +217,20 @@ class StudentTestController:
             StudentTestController._as_utc(series.valid_until),
         )
         snapshots = []
-        total_marks = Decimal("0")
+        # Collect option IDs to query option diagrams
+        all_opt_ids = [o.id for q_id in question_ids if questions.get(q_id) for o in questions.get(q_id).options if o.id]
+        start_opt_diag_map = {}
+        if all_opt_ids:
+            opt_diagrams = (
+                db.query(Diagram)
+                .filter(Diagram.type == 1, Diagram.ref_id.in_(all_opt_ids))
+                .order_by(Diagram.id.desc())
+                .all()
+            )
+            for d in opt_diagrams:
+                if d.ref_id not in start_opt_diag_map:
+                    start_opt_diag_map[d.ref_id] = d.path
+
         for position, question_id in enumerate(question_ids, start=1):
             question = questions.get(question_id)
             if question is None:
@@ -230,7 +243,14 @@ class StudentTestController:
                     question_text=question.question,
                     marks=question.marks,
                     options_snapshot=json.dumps(
-                        [{"id": o.id, "ans": o.ans} for o in question.options]
+                        [
+                            {
+                                "id": o.id,
+                                "ans": o.ans,
+                                "diagram_path": start_opt_diag_map.get(o.id),
+                            }
+                            for o in question.options
+                        ]
                     ),
                     correct_option_id=next(
                         (o.id for o in question.options if o.is_correct), None
@@ -573,6 +593,7 @@ class StudentTestController:
                 for opt in opts:
                     if "id" in opt and opt["id"]:
                         all_option_ids.append(opt["id"])
+                        all_option_ids.append(int(opt["id"]))
             except Exception:
                 pass
 
@@ -585,8 +606,12 @@ class StudentTestController:
                 .all()
             )
             for d in opt_diagrams:
-                if d.ref_id not in option_diagrams_map:
-                    option_diagrams_map[d.ref_id] = d.path
+                option_diagrams_map[d.ref_id] = d.path
+                option_diagrams_map[str(d.ref_id)] = d.path
+                try:
+                    option_diagrams_map[int(d.ref_id)] = d.path
+                except Exception:
+                    pass
 
         serialized_questions = []
         for q in attempt.questions:
@@ -597,7 +622,11 @@ class StudentTestController:
             options_response = []
             for opt in parsed_options:
                 opt_id = opt.get("id")
-                diag_path = opt.get("diagram_path") or option_diagrams_map.get(opt_id)
+                diag_path = (
+                    opt.get("diagram_path")
+                    or option_diagrams_map.get(opt_id)
+                    or (option_diagrams_map.get(str(opt_id)) if opt_id is not None else None)
+                )
                 options_response.append(
                     AttemptOptionResponse(
                         id=opt_id,
