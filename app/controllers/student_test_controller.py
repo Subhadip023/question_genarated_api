@@ -217,6 +217,7 @@ class StudentTestController:
             StudentTestController._as_utc(series.valid_until),
         )
         snapshots = []
+        total_marks = Decimal("0")
         # Collect option IDs to query option diagrams
         all_opt_ids = [o.id for q_id in question_ids if questions.get(q_id) for o in questions.get(q_id).options if o.id]
         start_opt_diag_map = {}
