@@ -11,6 +11,7 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session, joinedload
 from app.constants.attempt_status import AttemptStatus
 
+from app.models.diagram import Diagram
 from app.models.organization_user import OrganizationUser
 from app.models.question import Question
 from app.models.series_question import SeriesQuestion
@@ -548,6 +549,78 @@ class StudentTestController:
     def _serialize_attempt(attempt, db):
         series = db.query(TestSeries).filter(TestSeries.id == attempt.series_id).first()
         is_done = attempt.status != AttemptStatus.IN_PROGRESS
+
+        # Fetch diagram records for questions & options in this attempt
+        original_q_ids = [q.original_question_id for q in attempt.questions]
+        question_diagrams_map = {}
+        if original_q_ids:
+            q_diagrams = (
+                db.query(Diagram)
+                .filter(Diagram.type == 0, Diagram.ref_id.in_(original_q_ids))
+                .order_by(Diagram.id.asc())
+                .all()
+            )
+            for d in q_diagrams:
+                if d.ref_id not in question_diagrams_map:
+                    question_diagrams_map[d.ref_id] = []
+                question_diagrams_map[d.ref_id].append({"id": d.id, "path": d.path, "ref_id": d.ref_id, "type": d.type})
+
+        # Fetch option diagrams
+        all_option_ids = []
+        for q in attempt.questions:
+            try:
+                opts = json.loads(q.options_snapshot)
+                for opt in opts:
+                    if "id" in opt and opt["id"]:
+                        all_option_ids.append(opt["id"])
+            except Exception:
+                pass
+
+        option_diagrams_map = {}
+        if all_option_ids:
+            opt_diagrams = (
+                db.query(Diagram)
+                .filter(Diagram.type == 1, Diagram.ref_id.in_(all_option_ids))
+                .order_by(Diagram.id.desc())
+                .all()
+            )
+            for d in opt_diagrams:
+                if d.ref_id not in option_diagrams_map:
+                    option_diagrams_map[d.ref_id] = d.path
+
+        serialized_questions = []
+        for q in attempt.questions:
+            diagrams_list = question_diagrams_map.get(q.original_question_id, [])
+            q_diagram_path = diagrams_list[-1]["path"] if diagrams_list else None
+
+            parsed_options = json.loads(q.options_snapshot)
+            options_response = []
+            for opt in parsed_options:
+                opt_id = opt.get("id")
+                diag_path = opt.get("diagram_path") or option_diagrams_map.get(opt_id)
+                options_response.append(
+                    AttemptOptionResponse(
+                        id=opt_id,
+                        ans=opt.get("ans", ""),
+                        diagram_path=diag_path,
+                    )
+                )
+
+            serialized_questions.append(
+                AttemptQuestionResponse(
+                    id=q.id,
+                    original_question_id=q.original_question_id,
+                    position=q.position,
+                    question=q.question_text,
+                    marks=q.marks,
+                    diagram_path=q_diagram_path,
+                    diagrams=diagrams_list,
+                    options=options_response,
+                    selected_option_id=q.selected_option_id,
+                    correct_option_id=q.correct_option_id if is_done else None,
+                )
+            )
+
         return AttemptResponse(
             id=attempt.id,
             series_id=attempt.series_id,
@@ -558,22 +631,7 @@ class StudentTestController:
             status=attempt.status,
             score=attempt.score,
             total_marks=attempt.total_marks,
-            questions=[
-                AttemptQuestionResponse(
-                    id=q.id,
-                    original_question_id=q.original_question_id,
-                    position=q.position,
-                    question=q.question_text,
-                    marks=q.marks,
-                    options=[
-                        AttemptOptionResponse(**option)
-                        for option in json.loads(q.options_snapshot)
-                    ],
-                    selected_option_id=q.selected_option_id,
-                    correct_option_id=q.correct_option_id if is_done else None,
-                )
-                for q in attempt.questions
-            ],
+            questions=serialized_questions,
         )
 
     @staticmethod

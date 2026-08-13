@@ -52,6 +52,8 @@ class AttemptQuestionResponse(BaseModel):
     position: int
     question: str
     marks: Decimal
+    diagram_path: str | None = None
+    diagrams: list[dict] = Field(default_factory=list)
     options: list[AttemptOptionResponse]
     selected_option_id: int | None
     correct_option_id: int | None = None
