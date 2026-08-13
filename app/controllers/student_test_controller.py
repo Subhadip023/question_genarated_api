@@ -282,7 +282,7 @@ class StudentTestController:
     def save_answer(
         attempt_id: int,
         attempt_question_id: int,
-        selected_option_id: int,
+        selected_option_id: int | None,
         user_id: int,
         user_role: int,
         db: Session,
@@ -312,12 +312,15 @@ class StudentTestController:
                     "Question does not belong to this attempt"
                 )
 
-            options = json.loads(question.options_snapshot)
-            if selected_option_id not in {option["id"] for option in options}:
-                raise StudentTestValidationError("Selected option is invalid")
+            if selected_option_id is not None:
+                options = json.loads(question.options_snapshot)
+                if selected_option_id not in {option["id"] for option in options}:
+                    raise StudentTestValidationError("Selected option is invalid")
+                question.answered_at = datetime.now(timezone.utc)
+            else:
+                question.answered_at = None
 
             question.selected_option_id = selected_option_id
-            question.answered_at = datetime.now(timezone.utc)
             db.commit()
         except Exception:
             db.rollback()

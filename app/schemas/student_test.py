@@ -71,7 +71,7 @@ class AttemptResponse(BaseModel):
 
 
 class SaveAnswerRequest(BaseModel):
-    selected_option_id: int
+    selected_option_id: int | None = None
 
 
 class AttemptHistoryResponse(BaseModel):
