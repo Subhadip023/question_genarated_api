@@ -58,26 +58,16 @@ class TopicController:
         user_role: int,
         db: Session,
     ) -> list[TopicResponse]:
-        """Fetch all topics visible to the authenticated user."""
-        query = db.query(Topic)
-
-        if user_role == 0:
-            # Superadmin can view all topics
-            pass
-        elif user_role in (1, 2, 3):
-            # Fetch topics belonging to user's org + global topics (org_id = 0)
-            membership = (
-                db.query(OrganizationUser)
-                .filter(OrganizationUser.user_id == user_id)
-                .order_by(OrganizationUser.org_id)
-                .first()
-            )
-            org_id = membership.org_id if membership else -1
-            query = query.filter((Topic.org_id == org_id) | (Topic.org_id == 0))
-        else:
+        """Fetch all active topics in the application."""
+        if user_role not in (0, 1, 2, 3):
             return []
 
-        topics = query.filter(Topic.is_active.is_(True)).all()
+        topics = (
+            db.query(Topic)
+            .filter(Topic.is_active.is_(True))
+            .order_by(Topic.name.asc())
+            .all()
+        )
         return [TopicResponse.model_validate(t) for t in topics]
 
     @staticmethod
