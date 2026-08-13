@@ -6,6 +6,7 @@ import hashlib
 from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 
+from app.constants.attempt_status import AttemptStatus
 from app.controllers.question_controller import QuestionController
 from app.models.organization_user import OrganizationUser
 from app.models.question import Question
@@ -234,6 +235,28 @@ class TestSeriesController:
         ]
 
     @staticmethod
+    def list_for_user(user_id: int, user_role: int, db: Session) -> list[TestSeriesResponse]:
+        query = db.query(TestSeries).options(joinedload(TestSeries.series_questions))
+        query = TestSeriesController._apply_visibility(query, user_id, user_role, db)
+        items = query.all()
+        series_ids = [item.id for item in items]
+
+        attempt_counts = {}
+        if series_ids:
+            counts = (
+                db.query(TestAttempt.series_id, func.count(TestAttempt.id))
+                .filter(TestAttempt.series_id.in_(series_ids))
+                .group_by(TestAttempt.series_id)
+                .all()
+            )
+            attempt_counts = dict(counts)
+
+        return [
+            TestSeriesController._serialize(item, attempt_count=attempt_counts.get(item.id, 0))
+            for item in items
+        ]
+
+    @staticmethod
     def get_for_user(
         series_id: int, user_id: int, user_role: int, db: Session
     ) -> TestSeriesResponse | None:
@@ -269,11 +292,6 @@ class TestSeriesController:
 
         return query.filter(False)
 
-
-
-
-
-
     @staticmethod
     def get_results(
         series_id: int, user_id: int, user_role: int, db: Session
@@ -293,25 +311,39 @@ class TestSeriesController:
         items = []
         completed_scores = []
         for attempt, user in attempts:
+            score_val = float(attempt.score or 0)
+            total_val = float(attempt.total_marks or 0)
             pct = (
-                float((attempt.score / attempt.total_marks) * 100)
-                if attempt.total_marks > 0
+                round((score_val / total_val) * 100, 2)
+                if total_val > 0
                 else 0.0
             )
-            if attempt.status == "submitted":
-                completed_scores.append(float(attempt.score))
+
+            status_val = str(
+                attempt.status.value
+                if hasattr(attempt.status, "value")
+                else (attempt.status if attempt.status is not None else 0)
+            )
+
+            is_completed = (
+                attempt.status in (AttemptStatus.SUBMITTED, AttemptStatus.FORCE_SUBMITTED, 2, 3, "2", "3", "submitted", "force_submitted")
+                or status_val in ("2", "3", "submitted", "force_submitted")
+            )
+            if is_completed:
+                completed_scores.append(score_val)
+
             items.append(
                 TestSeriesResultItem(
                     attempt_id=attempt.id,
-                    user_id=user.id,
-                    student_name=user.name,
-                    student_email=user.email,
+                    user_id=user.id if user else 0,
+                    student_name=user.name if user and user.name else "Unknown",
+                    student_email=user.email if user and user.email else "",
                     started_at=attempt.started_at,
                     submitted_at=attempt.submitted_at,
-                    status=attempt.status,
-                    score=float(attempt.score),
-                    total_marks=float(attempt.total_marks),
-                    percentage=round(pct, 2),
+                    status=status_val,
+                    score=score_val,
+                    total_marks=total_val,
+                    percentage=pct,
                 )
             )
 
@@ -366,6 +398,3 @@ class TestSeriesController:
             updated_at=item.updated_at,
             attempt_count=attempt_count,
         )
-
-
-

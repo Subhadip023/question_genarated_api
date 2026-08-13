@@ -30,6 +30,10 @@ def get_test_series_results(
         )
     except TestSeriesPermissionError as exc:
         raise HTTPException(status_code=403, detail=str(exc)) from None
+    except Exception as exc:
+        import traceback
+        print(f"Error fetching results for test series {series_id}: {exc}\n{traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"Error fetching test series results: {str(exc)}") from None
 
 
 

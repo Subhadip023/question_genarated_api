@@ -86,7 +86,7 @@ class TestSeriesResultItem(BaseModel):
     student_email: str
     started_at: datetime
     submitted_at: datetime | None
-    status: str
+    status: str | int
     score: float
     total_marks: float
     percentage: float
