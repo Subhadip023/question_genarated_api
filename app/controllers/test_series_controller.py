@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.constants.attempt_status import AttemptStatus
 from app.controllers.question_controller import QuestionController
+from app.models.diagram import Diagram
 from app.models.organization_user import OrganizationUser
 from app.models.question import Question
 from app.models.series_question import SeriesQuestion
@@ -463,6 +464,33 @@ class TestSeriesController:
             .all()
         )
 
+        question_ids = [item.question.id for item in series_questions if item.question]
+        q_diagrams_map = {}
+        if question_ids:
+            q_diagrams = (
+                db.query(Diagram)
+                .filter(Diagram.type == 0, Diagram.ref_id.in_(question_ids))
+                .order_by(Diagram.id.asc())
+                .all()
+            )
+            for d in q_diagrams:
+                if d.ref_id not in q_diagrams_map:
+                    q_diagrams_map[d.ref_id] = []
+                q_diagrams_map[d.ref_id].append({"id": d.id, "path": d.path})
+
+        all_option_ids = [opt.id for item in series_questions for opt in item.question.options if opt.id]
+        opt_diag_map = {}
+        if all_option_ids:
+            opt_diagrams = (
+                db.query(Diagram)
+                .filter(Diagram.type == 1, Diagram.ref_id.in_(all_option_ids))
+                .order_by(Diagram.id.desc())
+                .all()
+            )
+            for d in opt_diagrams:
+                if d.ref_id not in opt_diag_map:
+                    opt_diag_map[d.ref_id] = d.path
+
         return {
             "series_id": test_series.id,
             "series_name": test_series.name,
@@ -472,12 +500,14 @@ class TestSeriesController:
                     "question_id": item.question.id,
                     "question": item.question.question,
                     "marks": float(item.question.marks),
-
+                    "diagrams": q_diagrams_map.get(item.question.id, []),
+                    "diagram_path": q_diagrams_map[item.question.id][-1]["path"] if q_diagrams_map.get(item.question.id) else None,
                     "options": [
                         {
                             "id": option.id,
                             "text": option.ans,
-                            "is_correct": option.is_correct
+                            "is_correct": option.is_correct,
+                            "diagram_path": opt_diag_map.get(option.id)
                         }
                         for option in item.question.options
                     ]
