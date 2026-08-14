@@ -398,3 +398,92 @@ class TestSeriesController:
             updated_at=item.updated_at,
             attempt_count=attempt_count,
         )
+
+    @staticmethod
+    def get_questions_with_answers(
+        series_id: int,
+        user_id: int,
+        user_role: int,
+        db: Session
+    ):
+
+        if user_role == 3:
+            raise TestSeriesPermissionError(
+                "Students cannot view test series questions and answers"
+            )
+
+        test_series = (
+            db.query(TestSeries)
+            .filter(TestSeries.id == series_id)
+            .first()
+        )
+
+        if not test_series:
+            return None
+
+        if user_role == 0:
+            pass
+
+        elif user_role in (1, 2):
+
+            membership = (
+                db.query(OrganizationUser)
+                .filter(
+                    OrganizationUser.user_id == user_id
+                )
+                .order_by(OrganizationUser.org_id)
+                .first()
+            )
+
+            if not membership:
+                raise TestSeriesPermissionError(
+                    "User is not assigned to any organization"
+                )
+
+            if membership.org_id != test_series.org_id:
+                raise TestSeriesPermissionError(
+                    "You do not have permission to view this test series"
+                )
+
+        else:
+            raise TestSeriesPermissionError(
+                "You do not have permission to view this test series"
+            )
+
+        series_questions = (
+            db.query(SeriesQuestion)
+            .options(
+                joinedload(SeriesQuestion.question)
+                .joinedload(Question.options)
+            )
+            .filter(
+                SeriesQuestion.series_id == series_id
+            )
+            .order_by(SeriesQuestion.position)
+            .all()
+        )
+
+        return {
+            "series_id": test_series.id,
+            "series_name": test_series.name,
+
+            "questions": [
+                {
+                    "question_id": item.question.id,
+                    "question": item.question.question,
+                    "marks": float(item.question.marks),
+
+                    "options": [
+                        {
+                            "id": option.id,
+                            "text": option.ans,
+                            "is_correct": option.is_correct
+                        }
+                        for option in item.question.options
+                    ]
+                }
+                for item in series_questions
+            ]
+        }
+
+

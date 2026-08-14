@@ -108,3 +108,31 @@ def delete_test_series(
         raise HTTPException(status_code=403, detail=str(exc)) from None
     except TestSeriesHasAttemptsError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from None
+
+@router.get("/{series_id}/questions")
+def get_test_series_questions(
+    series_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    try:
+        result = TestSeriesController.get_questions_with_answers(
+            series_id,
+            request.state.user_id,
+            request.state.user_role,
+            db
+        )
+
+        if result is None:
+            raise HTTPException(
+                status_code=404,
+                detail="Test series not found"
+            )
+
+        return result
+
+    except TestSeriesPermissionError as exc:
+        raise HTTPException(
+            status_code=403,
+            detail=str(exc)
+        ) from None
