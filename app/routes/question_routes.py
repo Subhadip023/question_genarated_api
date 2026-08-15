@@ -86,6 +86,7 @@ def list_questions(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
     topic_id: int | None = Query(default=None),
+    search: str | None = Query(default=None, max_length=200),
     db: Session = Depends(get_db),
 ) -> PaginatedQuestionResponse:
     return QuestionController.get_all_questions(
@@ -95,6 +96,7 @@ def list_questions(
         page_size=page_size,
         db=db,
         topic_id=topic_id,
+        search=search,
     )
 
 
