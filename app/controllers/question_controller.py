@@ -212,6 +212,7 @@ class QuestionController:
         page_size: int,
         db: Session,
         topic_id: int | None = None,
+        search: str | None = None,
     ) -> PaginatedQuestionResponse:
         """Fetch one page of questions visible to the authenticated user."""
         query = db.query(Question)
@@ -220,6 +221,8 @@ class QuestionController:
         )
         if topic_id is not None:
             query = query.filter(Question.topic_id == topic_id)
+        if search:
+            query = query.filter(Question.question.ilike(f"%{search}%"))
         total = query.count()
         questions = (
             query.options(joinedload(Question.options), joinedload(Question.topic))
