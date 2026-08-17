@@ -65,7 +65,7 @@ class TopicController:
         topics = (
             db.query(Topic)
             .filter(Topic.is_active.is_(True))
-            .order_by(Topic.name.asc())
+            .order_by(Topic.id.desc())
             .all()
         )
         return [TopicResponse.model_validate(t) for t in topics]
