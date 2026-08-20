@@ -105,6 +105,9 @@ def send_email(
             raise MailServiceError(f"SMTP error: {exc}") from exc
     else:
         # Development / Fallback mode when SMTP credentials are missing
+        logger.warning(
+            f"SMTP_USER or SMTP_PASSWORD is not configured. Email to {to_email} was simulated (not delivered to inbox)."
+        )
         logger.info(
             f"[DEV MAIL LOG] Simulated email dispatch:\n"
             f"From: {from_email}\n"
@@ -112,13 +115,12 @@ def send_email(
             f"Subject: {subject}\n"
             f"Body: {body[:300]}..."
         )
-
-    return {
-        "status": "success",
-        "message": f"Simulated email logged to server console for {to_email}",
-        "to_email": to_email,
-        "subject": subject,
-    }
+        return {
+            "status": "simulated",
+            "message": f"Simulated email (SMTP not configured) logged for {to_email}",
+            "to_email": to_email,
+            "subject": subject,
+        }
 
 
 class MailService:

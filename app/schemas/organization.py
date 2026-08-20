@@ -52,3 +52,7 @@ class OrganizationCreateResponse(BaseModel):
 
     organization: OrganizationResponse
     admin: UserResponse
+    email_sent: bool = True
+    email_status: str | None = None
+    email_message: str | None = None
+

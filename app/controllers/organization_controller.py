@@ -79,8 +79,12 @@ class OrganizationController:
             db.rollback()
             raise
 
+        email_sent = True
+        email_status = "success"
+        email_message = f"Welcome email sent to {admin.email}"
+
         try:
-            MailService.send_mail(
+            res = MailService.send_mail(
                 to_email=admin.email,
                 subject="Welcome to QMaster - Your organization account",
                 body=(
@@ -93,14 +97,25 @@ class OrganizationController:
                     "Please reset your password after you log in."
                 ),
             )
-        except MailServiceError as exc:
-            logger.warning(
-                f"Organization created successfully, but welcome email to {admin.email} failed: {exc}"
+            email_status = res.get("status", "success")
+            email_message = res.get("message", f"Email processed for {admin.email}")
+            if email_status == "simulated":
+                email_sent = False
+        except Exception as exc:
+            email_sent = False
+            email_status = "error"
+            email_message = f"Failed to send welcome email: {exc}"
+            logger.error(
+                f"Organization created (ID {organization.id}), but welcome email to {admin.email} failed: {exc}",
+                exc_info=True,
             )
 
         return OrganizationCreateResponse(
             organization=OrganizationResponse.model_validate(organization),
             admin=UserResponse.model_validate(admin),
+            email_sent=email_sent,
+            email_status=email_status,
+            email_message=email_message,
         )
 
     @staticmethod
@@ -186,11 +201,12 @@ class OrganizationController:
                     "For security, please change your password after your first login."
                 ),
             )
-        except MailServiceError as exc:
-            logger.warning(
-                "Organization member %s was created, but the welcome email failed: %s",
+        except Exception as exc:
+            logger.error(
+                "Organization member %s was created, but welcome email failed: %s",
                 user.email,
                 exc,
+                exc_info=True,
             )
 
         return UserResponse.model_validate(user)
