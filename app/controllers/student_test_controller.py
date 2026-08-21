@@ -9,6 +9,7 @@ from decimal import Decimal
 
 from sqlalchemy import or_
 from sqlalchemy.orm import Session, joinedload
+from app.models.user import User
 from app.constants.attempt_status import AttemptStatus
 
 from app.models.diagram import Diagram
@@ -673,3 +674,142 @@ class StudentTestController:
     @staticmethod
     def _as_utc(value):
         return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)
+
+    @staticmethod
+    def get_student_history(
+        student_id: int,
+        user_id: int,
+        user_role: int,
+        db: Session,
+    ):
+
+        student = db.query(User).filter(
+            User.id == student_id,
+            User.role == 3
+        ).first()
+
+        if not student:
+            raise StudentTestValidationError(
+                "Student not found"
+            )
+
+        if user_role == 3:
+
+            if user_id != student_id:
+                raise StudentTestPermissionError(
+                    "You can only view your own test history"
+                )
+
+        elif user_role == 0:
+            pass
+
+        elif user_role == 1:
+
+            admin_membership = db.query(OrganizationUser).filter(
+                OrganizationUser.user_id == user_id
+            ).first()
+
+            if not admin_membership:
+                raise StudentTestPermissionError(
+                    "You are not assigned to any organization"
+                )
+
+            student_membership = db.query(OrganizationUser).filter(
+                OrganizationUser.user_id == student_id,
+                OrganizationUser.org_id == admin_membership.org_id
+            ).first()
+
+            if not student_membership:
+                raise StudentTestPermissionError(
+                    "Student does not belong to your organization"
+                )
+
+        elif user_role == 2:
+            teacher_membership = db.query(OrganizationUser).filter(
+                OrganizationUser.user_id == user_id
+            ).first()
+
+            if not teacher_membership:
+                raise StudentTestPermissionError(
+                    "Teacher is not assigned to any organization"
+                )
+
+        else:
+            raise StudentTestPermissionError(
+                "You do not have permission to view student history"
+            )
+
+        query = (
+            db.query(TestAttempt, TestSeries)
+            .join(
+                TestSeries,
+                TestAttempt.series_id == TestSeries.id
+            )
+            .filter(
+                TestAttempt.user_id == student_id
+            )
+        )
+
+        if user_role == 2:
+            query = query.filter(
+                TestSeries.created_by == user_id
+            )
+
+
+        elif user_role == 1:
+
+            admin_membership = db.query(OrganizationUser).filter(
+                OrganizationUser.user_id == user_id
+            ).first()
+
+            query = query.filter(
+                TestSeries.org_id == admin_membership.org_id
+            )
+
+        attempts = query.order_by(
+            TestAttempt.started_at.desc()
+        ).all()
+
+        history = []
+
+        for attempt, series in attempts:
+
+            score = float(attempt.score or 0)
+            total_marks = float(attempt.total_marks or 0)
+
+            percentage = 0
+
+            if total_marks > 0:
+                percentage = round(
+                    (score / total_marks) * 100,
+                    2
+                )
+
+            history.append({
+                "attempt_id": attempt.id,
+
+                "series_id": series.id,
+                "series_name": series.name,
+                "series_code": series.code,
+
+                "student_id": student.id,
+                "student_name": student.name,
+                "student_email": student.email,
+
+                "score": score,
+                "total_marks": total_marks,
+                "percentage": percentage,
+
+                "status": attempt.status,
+
+                "started_at": attempt.started_at,
+                "submitted_at": attempt.submitted_at,
+            })
+
+        return {
+            "student_id": student.id,
+            "student_name": student.name,
+            "student_email": student.email,
+            "total_tests": len(history),
+            "history": history,
+        }
