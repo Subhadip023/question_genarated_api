@@ -148,3 +148,18 @@ def attempt_history(
             request.state.user_id, request.state.user_role, db
         )
     )
+
+@router.get("/{student_id}/history")
+def get_student_history(
+    student_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    return _call(
+        lambda: StudentTestController.get_student_history(
+            student_id=student_id,
+            user_id=request.state.user_id,
+            user_role=request.state.user_role,
+            db=db,
+        )
+    )
