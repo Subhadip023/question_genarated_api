@@ -77,3 +77,8 @@ class PaginatedQuestionResponse(BaseModel):
     page: int
     page_size: int
     total_pages: int
+
+class QuestionBulkUpdate(BaseModel):
+    question_ids: list[int] = Field(min_length=1)
+    topic_id: int | None = None
+    marks: Decimal | None = None
