@@ -18,6 +18,7 @@ from app.schemas.question import (
     QuestionResponse,
     QuestionUpdate,
 )
+from app.models.topic import Topic
 
 
 class QuestionCreatorHasNoOrganizationError(Exception):
@@ -380,3 +381,103 @@ class QuestionController:
             raise
 
         return True
+
+    @staticmethod
+    def bulk_update(
+        data,
+        user_id: int,
+        user_role: int,
+        db: Session,
+    ):
+        # Students cannot modify questions
+        if int(user_role) == 3:
+            raise HTTPException(
+                status_code=403,
+                detail="Students cannot update questions"
+            )
+
+        # Nothing to update
+        if data.topic_id is None and data.marks is None:
+            raise HTTPException(
+                status_code=400,
+                detail="Provide topic_id or marks to update"
+            )
+
+        # Remove duplicate IDs
+        question_ids = list(set(data.question_ids))
+
+        questions = (
+            db.query(Question)
+            .filter(
+                Question.id.in_(question_ids)
+            )
+            .all()
+        )
+
+        if not questions:
+            raise HTTPException(
+                status_code=404,
+                detail="No questions found"
+            )
+
+        # Check all requested IDs actually exist
+        found_ids = {question.id for question in questions}
+        missing_ids = [
+            question_id
+            for question_id in question_ids
+            if question_id not in found_ids
+        ]
+
+        if missing_ids:
+            raise HTTPException(
+                status_code=404,
+                detail={
+                    "message": "Some questions were not found",
+                    "question_ids": missing_ids,
+                }
+            )
+
+        # Optional: validate topic exists
+        if data.topic_id is not None:
+            topic = (
+                db.query(Topic)
+                .filter(Topic.id == data.topic_id)
+                .first()
+            )
+
+            if not topic:
+                raise HTTPException(
+                    status_code=404,
+                    detail="Topic not found"
+                )
+
+        # Update selected questions
+        for question in questions:
+
+            if data.topic_id is not None:
+                question.topic_id = data.topic_id
+
+            if data.marks is not None:
+                question.marks = data.marks
+
+        try:
+            db.commit()
+
+            for question in questions:
+                db.refresh(question)
+
+        except Exception:
+            db.rollback()
+            raise
+
+        return {
+            "message": "Questions updated successfully",
+            "updated_count": len(questions),
+            "question_ids": question_ids,
+            "topic_id": data.topic_id,
+            "marks": (
+                float(data.marks)
+                if data.marks is not None
+                else None
+            ),
+        }

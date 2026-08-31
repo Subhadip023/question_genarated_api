@@ -5,6 +5,7 @@ This acts as the View/Route (V) layer in MVC.
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.orm import Session
+from app.schemas.question import QuestionBulkUpdate
 
 from app.controllers.question_controller import (
     QuestionController,
@@ -170,3 +171,16 @@ def delete_question(
     if not deleted:
         raise HTTPException(status_code=404, detail="Question not found")
     return {"detail": "Question deleted"}
+
+@router.put("/bulk")
+def bulk_update_questions(
+    data: QuestionBulkUpdate,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    return QuestionController.bulk_update(
+        data=data,
+        user_id=request.state.user_id,
+        user_role=request.state.user_role,
+        db=db,
+    )
