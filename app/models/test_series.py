@@ -45,3 +45,15 @@ class TestSeries(Base):
         cascade="all, delete-orphan",
         order_by="SeriesQuestion.position",
     )
+    
+    is_result_show: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+        nullable=False,
+    )
+
+    is_score_show: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+        nullable=False,
+    )
