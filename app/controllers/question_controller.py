@@ -480,4 +480,6 @@ class QuestionController:
                 if data.marks is not None
                 else None
             ),
+            "test_series_id": data.test_series_id,
+            "name": data.name,
         }

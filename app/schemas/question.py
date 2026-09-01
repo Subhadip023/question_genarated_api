@@ -82,3 +82,5 @@ class QuestionBulkUpdate(BaseModel):
     question_ids: list[int] = Field(min_length=1)
     topic_id: int | None = None
     marks: Decimal | None = None
+    test_series_id: int | None = None
+    name: str | None = None
