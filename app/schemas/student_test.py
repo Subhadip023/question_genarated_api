@@ -14,6 +14,8 @@ class AvailableSeriesResponse(BaseModel):
     duration_seconds: int
     question_count: int
     topics: list[str] = Field(default_factory=list)
+    is_result_show: bool = False
+    is_score_show: bool = False
 
 
 class PaginatedAvailableSeriesResponse(BaseModel):
@@ -69,6 +71,8 @@ class AttemptResponse(BaseModel):
     status: int
     score: Decimal
     total_marks: Decimal
+    is_result_show: bool = False
+    is_score_show: bool = False
     questions: list[AttemptQuestionResponse]
 
 
@@ -86,6 +90,8 @@ class AttemptHistoryResponse(BaseModel):
     status: int
     score: Decimal
     total_marks: Decimal
+    is_result_show: bool = False
+    is_score_show: bool = False
 
 class SubmitAttemptRequest(BaseModel):
     force_submit: int = 0
