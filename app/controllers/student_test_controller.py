@@ -139,6 +139,8 @@ class StudentTestController:
                     duration_seconds=item.duration_seconds,
                     question_count=len(item.series_questions),
                     topics=topic_names,
+                    is_result_show=item.is_result_show,
+                    is_score_show=item.is_score_show,
                 )
             )
 
@@ -425,6 +427,8 @@ class StudentTestController:
                     status=attempt.status,
                     score=attempt.score,
                     total_marks=attempt.total_marks,
+                    is_result_show=series.is_result_show if series else False,
+                    is_score_show=series.is_score_show if series else False,
                 )
             )
         return result
@@ -662,6 +666,8 @@ class StudentTestController:
             status=attempt.status,
             score=attempt.score,
             total_marks=attempt.total_marks,
+            is_result_show=series.is_result_show if series else False,
+            is_score_show=series.is_score_show if series else False,
             questions=serialized_questions,
         )
 
