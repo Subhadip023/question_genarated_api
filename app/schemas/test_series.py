@@ -13,6 +13,8 @@ class TestSeriesCreate(BaseModel):
     duration_seconds: int = Field(..., gt=0)
     question_ids: list[int] = Field(default_factory=list)
     is_active: bool = True
+    is_result_show: bool = False
+    is_score_show: bool = False
 
     @field_validator("valid_until")
     @classmethod
@@ -43,6 +45,8 @@ class TestSeriesResponse(BaseModel):
     valid_until: datetime
     duration_seconds: int
     is_active: bool
+    is_result_show: bool
+    is_score_show: bool
     question_ids: list[int]
     created_at: datetime
     updated_at: datetime
@@ -57,6 +61,8 @@ class TestSeriesUpdate(BaseModel):
     duration_seconds: int | None = Field(None, gt=0)
     question_ids: list[int] | None = Field(None)
     is_active: bool | None = None
+    is_result_show: bool | None = None
+    is_score_show: bool | None = None
 
     @field_validator("valid_until")
     @classmethod
@@ -87,9 +93,9 @@ class TestSeriesResultItem(BaseModel):
     started_at: datetime
     submitted_at: datetime | None
     status: str | int
-    score: float
-    total_marks: float
-    percentage: float
+    score: float | None = None
+    total_marks: float | None = None
+    percentage: float | None = None
 
 
 class TestSeriesResultsResponse(BaseModel):
@@ -97,9 +103,11 @@ class TestSeriesResultsResponse(BaseModel):
     series_name: str
     invite_token: str | None = None
     access_type: str | None = None
+    is_result_show: bool
+    is_score_show: bool
     total_attempts: int
     completed_attempts: int
-    average_score: float
+    average_score: float | None = None
     results: list[TestSeriesResultItem]
 
 
