@@ -303,22 +303,6 @@ class TestSeriesController:
         if series is None:
             raise TestSeriesPermissionError("Test series not found or access denied")
 
-        if not series.is_result_show:
-            return TestSeriesResultsResponse(
-                series_id=series.id,
-                series_name=series.name,
-                invite_token=None,
-                access_type=series.access_type,
-
-                is_result_show=False,
-                is_score_show=bool(series.is_score_show),
-
-                total_attempts=0,
-                completed_attempts=0,
-                average_score=None,
-                results=[],
-            )
-
         attempts = (
             db.query(TestAttempt, User)
             .join(User, TestAttempt.user_id == User.id)
@@ -360,17 +344,9 @@ class TestSeriesController:
                     started_at=attempt.started_at,
                     submitted_at=attempt.submitted_at,
                     status=status_val,
-                    score=score_val if series.is_score_show else None,
-                    total_marks=(
-                        total_val
-                        if series.is_score_show
-                        else None
-                    ),
-                    percentage=(
-                        pct
-                        if series.is_score_show
-                        else None
-                    ),
+                    score=score_val,
+                    total_marks=total_val,
+                    percentage=pct,
                 )
             )
 
@@ -387,14 +363,9 @@ class TestSeriesController:
             access_type=series.access_type,
             is_result_show=bool(series.is_result_show),
             is_score_show=bool(series.is_score_show),
-
             total_attempts=len(attempts),
             completed_attempts=len(completed_scores),
-            average_score=(
-                round(avg_score, 2)
-                if series.is_score_show
-                else None
-            ),
+            average_score=round(avg_score, 2),
             results=items,
         )
 

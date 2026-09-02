@@ -399,7 +399,7 @@ class StudentTestController:
     ) -> AttemptResponse:
         attempt = StudentTestController._viewable_attempt(attempt_id, user_id, user_role, db)
         StudentTestController._mark_expired(attempt, db)
-        return StudentTestController._serialize_attempt(attempt, db)
+        return StudentTestController._serialize_attempt(attempt, db, user_role=user_role)
 
     @staticmethod
     def history(
@@ -572,9 +572,15 @@ class StudentTestController:
             db.commit()
 
     @staticmethod
-    def _serialize_attempt(attempt, db):
+    def _serialize_attempt(attempt, db, user_role=None):
         series = db.query(TestSeries).filter(TestSeries.id == attempt.series_id).first()
         is_done = attempt.status != AttemptStatus.IN_PROGRESS
+        is_staff = user_role is not None and user_role in (0, 1, 2)
+
+        is_result_show = bool(series.is_result_show) if series else False
+        is_score_show = bool(series.is_score_show) if series else False
+
+        show_correct = is_done if is_staff else (is_done and is_result_show)
 
         # Fetch diagram records for questions & options in this attempt
         original_q_ids = [q.original_question_id for q in attempt.questions]
@@ -652,7 +658,7 @@ class StudentTestController:
                     diagrams=diagrams_list,
                     options=options_response,
                     selected_option_id=q.selected_option_id,
-                    correct_option_id=q.correct_option_id if is_done else None,
+                    correct_option_id=q.correct_option_id if show_correct else None,
                 )
             )
 
@@ -664,10 +670,10 @@ class StudentTestController:
             expires_at=StudentTestController._as_utc(attempt.expires_at),
             submitted_at=StudentTestController._as_utc(attempt.submitted_at) if attempt.submitted_at else None,
             status=attempt.status,
-            score=attempt.score,
+            score=attempt.score if (is_staff or is_score_show) else Decimal("0"),
             total_marks=attempt.total_marks,
-            is_result_show=series.is_result_show if series else False,
-            is_score_show=series.is_score_show if series else False,
+            is_result_show=True if is_staff else is_result_show,
+            is_score_show=True if is_staff else is_score_show,
             questions=serialized_questions,
         )
 
