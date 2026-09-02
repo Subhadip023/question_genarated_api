@@ -44,19 +44,20 @@ class OrganizationController:
 
     @staticmethod
     def create_organization(
-        data: OrganizationCreate, db: Session
+        data: OrganizationCreate, db: Session, creator_role: int | None = None
     ) -> OrganizationCreateResponse:
         admin_password = (
             data.admin.password.strip()
             if data.admin.password and data.admin.password.strip()
             else secrets.token_urlsafe(12)
         )
+        is_active = True if creator_role == 0 else False
         organization = Organization(
             name=data.name.strip(),
             code=OrganizationController._generate_unique_code(db),
             location=data.location.strip() if data.location else None,
             phone_number=data.phone_number.strip() if data.phone_number else None,
-            is_active=data.is_active,
+            is_active=is_active,
         )
         admin = User(
             role=1,

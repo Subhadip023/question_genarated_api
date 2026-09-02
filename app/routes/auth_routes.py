@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from app.controllers.auth_controller import (
+    AccountDeactivatedError,
     AuthController,
     EmailAlreadyExistsError,
     InvalidCredentialsError,
@@ -42,6 +43,11 @@ def login(data: LoginRequest, db: Session = Depends(get_db)) -> TokenResponse:
             status_code=401,
             detail="Incorrect email or password",
             headers={"WWW-Authenticate": "Bearer"},
+        ) from None
+    except AccountDeactivatedError as exc:
+        raise HTTPException(
+            status_code=403,
+            detail=str(exc) or "Account is not active, Contact to super admin",
         ) from None
 
 

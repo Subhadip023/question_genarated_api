@@ -26,13 +26,16 @@ router = APIRouter(prefix="/organizations", tags=["Organizations"])
     "/",
     response_model=OrganizationCreateResponse,
     status_code=status.HTTP_201_CREATED,
-    summary="Create an organization (superadmin only)",
+    summary="Create an organization",
 )
 def create_organization(
-    data: OrganizationCreate, db: Session = Depends(get_db)
+    data: OrganizationCreate,
+    request: Request,
+    db: Session = Depends(get_db),
 ) -> OrganizationCreateResponse:
+    user_role = getattr(request.state, "user_role", None)
     try:
-        return OrganizationController.create_organization(data, db)
+        return OrganizationController.create_organization(data, db, creator_role=user_role)
     except OrganizationAdminEmailExistsError:
         raise HTTPException(
             status_code=409,

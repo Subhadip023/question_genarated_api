@@ -21,6 +21,10 @@ class InvalidCredentialsError(Exception):
     """Raised when login credentials are incorrect."""
 
 
+class AccountDeactivatedError(Exception):
+    """Raised when an organization account is deactivated."""
+
+
 class EmailAlreadyExistsError(Exception):
     """Raised when a registration email is already used."""
 
@@ -72,6 +76,8 @@ class AuthController:
                 .order_by(Organization.id)
                 .first()
             )
+            if organization and not organization.is_active:
+                raise AccountDeactivatedError("Account is not active, Contact to super admin")
             organization_id = organization.id if organization else None
             organization_name = organization.name if organization else None
 
