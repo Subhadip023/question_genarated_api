@@ -363,6 +363,7 @@ class TestSeriesController:
             access_type=series.access_type,
             is_result_show=bool(series.is_result_show),
             is_score_show=bool(series.is_score_show),
+            result_file_key = f"results/series_{series.id}/result.pdf",
             total_attempts=len(attempts),
             completed_attempts=len(completed_scores),
             average_score=round(avg_score, 2),
