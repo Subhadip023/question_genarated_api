@@ -104,6 +104,7 @@ class TestSeriesResultsResponse(BaseModel):
     invite_token: str | None = None
     access_type: str | None = None
     is_result_show: bool
+    result_file_key: str | None = None
     is_score_show: bool
     total_attempts: int
     completed_attempts: int
