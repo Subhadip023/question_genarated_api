@@ -13,12 +13,6 @@ class OrganizationPermissionMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request: Request, call_next):
         path = request.url.path.rstrip("/") or "/"
-        if request.method == "POST" and path == "/organizations":
-            if not self.can_create(getattr(request.state, "user_role", None)):
-                return JSONResponse(
-                    status_code=403,
-                    content={"detail": "Only a superadmin can create an organization"},
-                )
         if request.method == "PATCH" and path.startswith("/organizations/"):
             try:
                 organization_id = int(path.rsplit("/", 1)[1])

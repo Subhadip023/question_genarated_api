@@ -25,33 +25,40 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request: Request, call_next):
         path = request.url.path.rstrip("/") or "/"
-        if (
-            request.method == "OPTIONS"
-            or path in self.PUBLIC_PATHS
-            or path.startswith(self.PUBLIC_PREFIXES)
-        ):
-            return await call_next(request)
 
         authorization = request.headers.get("Authorization", "")
         scheme, _, token = authorization.partition(" ")
-        if scheme.lower() != "bearer" or not token:
+        token_provided = scheme.lower() == "bearer" and bool(token)
+
+        if token_provided:
+            try:
+                claims = decode_access_token(token)
+                user_id = int(claims["sub"])
+                db = SessionLocal()
+                try:
+                    user = db.query(User).filter(User.id == user_id).first()
+                    if user is not None:
+                        request.state.user_id = user.id
+                        request.state.user_role = user.role
+                    else:
+                        return self._unauthorized("User no longer exists")
+                finally:
+                    db.close()
+            except InvalidTokenError as exc:
+                return self._unauthorized(str(exc))
+
+        is_public = (
+            request.method == "OPTIONS"
+            or path in self.PUBLIC_PATHS
+            or path.startswith(self.PUBLIC_PREFIXES)
+            or (request.method == "POST" and path == "/organizations")
+        )
+
+        if is_public:
+            return await call_next(request)
+
+        if not token_provided or getattr(request.state, "user_id", None) is None:
             return self._unauthorized("Bearer token required")
-
-        try:
-            claims = decode_access_token(token)
-            user_id = int(claims["sub"])
-        except InvalidTokenError as exc:
-            return self._unauthorized(str(exc))
-
-        db = SessionLocal()
-        try:
-            user = db.query(User).filter(User.id == user_id).first()
-            if user is None:
-                return self._unauthorized("User no longer exists")
-            request.state.user_id = user.id
-            request.state.user_role = user.role
-        finally:
-            db.close()
 
         if (
             path in self.MAIL_PATHS
