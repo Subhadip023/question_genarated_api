@@ -30,6 +30,7 @@ from app.routes import (
     question_routes,
     question_set_routes,
     student_test_routes,
+    teacher_group_routes,
     test_series_routes,
     topic_routes,
     user_routes,
@@ -77,11 +78,13 @@ app.include_router(topic_routes.router)
 app.include_router(question_option_routes.router)
 app.include_router(question_set_routes.router)
 app.include_router(test_series_routes.router)
+app.include_router(teacher_group_routes.router)
 app.include_router(student_test_routes.router)
 app.include_router(user_routes.router)
 app.include_router(auth_routes.router)
 app.include_router(organization_routes.router)
 app.include_router(diagram_routes.router)
+
 
 
 if __name__ == "__main__":

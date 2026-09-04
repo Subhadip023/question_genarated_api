@@ -9,6 +9,7 @@ from app.routes import (
     question_option_routes,
     question_routes,
     student_test_routes,
+    teacher_group_routes,
     test_series_routes,
     topic_routes,
     user_routes,
@@ -23,7 +24,9 @@ __all__ = [
     "question_routes",
     "question_option_routes",
     "student_test_routes",
+    "teacher_group_routes",
     "test_series_routes",
     "topic_routes",
     "user_routes",
 ]
+

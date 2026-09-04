@@ -151,5 +151,42 @@ CREATE TABLE IF NOT EXISTS attempt_answers (
     FOREIGN KEY (selected_option_id) REFERENCES question_options (id)
 );
 
+-- ── Migration 11: teacher_groups ───────────────────────────
+CREATE TABLE IF NOT EXISTS teacher_groups (
+    id INTEGER NOT NULL AUTO_INCREMENT,
+    org_id INTEGER NOT NULL DEFAULT 0,
+    created_by INTEGER NOT NULL,
+    name VARCHAR(255) NOT NULL,
+    supervisor INTEGER NOT NULL,
+    is_active BOOL NOT NULL DEFAULT TRUE,
+    is_deleted BOOL NOT NULL DEFAULT FALSE,
+    deleted_at DATETIME NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    INDEX ix_teacher_groups_id (id),
+    INDEX ix_teacher_groups_org_id (org_id),
+    FOREIGN KEY (created_by) REFERENCES users (id),
+    FOREIGN KEY (supervisor) REFERENCES users (id)
+);
+
+-- ── Migration 12: group_teachers ───────────────────────────
+CREATE TABLE IF NOT EXISTS group_teachers (
+    id INTEGER NOT NULL AUTO_INCREMENT,
+    group_id INTEGER NOT NULL,
+    teacher_id INTEGER NOT NULL,
+    is_deleted BOOL NOT NULL DEFAULT FALSE,
+    deleted_at DATETIME NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    INDEX ix_group_teachers_id (id),
+    INDEX ix_group_teachers_group_id (group_id),
+    INDEX ix_group_teachers_teacher_id (teacher_id),
+    FOREIGN KEY (group_id) REFERENCES teacher_groups (id) ON DELETE CASCADE,
+    FOREIGN KEY (teacher_id) REFERENCES users (id) ON DELETE CASCADE
+);
+
 -- ── Alembic version stamp (latest migration) ─────────────────
 INSERT IGNORE INTO alembic_version (version_num) VALUES ('f37fce218399');
+
