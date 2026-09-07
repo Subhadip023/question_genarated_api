@@ -3,6 +3,7 @@ from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 
 from app.models.user import User
+from app.models.organization_user import OrganizationUser
 from app.database import get_db
 from app.services.auth_service import decode_access_token
 
@@ -15,7 +16,6 @@ def get_current_user(
     token: str = Depends(oauth2_scheme),
     db: Session = Depends(get_db)
 ):
-
     # Decode JWT
     payload = decode_access_token(token)
 
@@ -44,3 +44,25 @@ def get_current_user(
         )
 
     return user
+
+
+def get_current_org_id(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> int:
+
+    organization_user = (
+        db.query(OrganizationUser)
+        .filter(
+            OrganizationUser.user_id == current_user.id
+        )
+        .first()
+    )
+
+    if not organization_user:
+        raise HTTPException(
+            status_code=403,
+            detail="User is not associated with any organization"
+        )
+
+    return organization_user.org_id
