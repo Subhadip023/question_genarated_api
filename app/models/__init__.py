@@ -13,6 +13,7 @@ from app.models.test_series import TestSeries
 from app.models.topic import Topic
 from app.models.user import User
 from app.models.batch import Batch
+from app.models.batch_student import BatchStudent
 
 __all__ = [
     "Diagram",
