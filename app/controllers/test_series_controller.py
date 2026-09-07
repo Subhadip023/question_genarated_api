@@ -13,6 +13,7 @@ from app.models.organization_user import OrganizationUser
 from app.models.question import Question
 from app.models.series_question import SeriesQuestion
 from app.models.test_attempt import TestAttempt
+from app.models.test_access import TestAccess
 from app.models.test_series import TestSeries
 from app.models.user import User
 from app.schemas.test_series import (
@@ -41,68 +42,141 @@ class TestSeriesHasAttemptsError(Exception):
 class TestSeriesController:
     @staticmethod
     def create(
-        data: TestSeriesCreate, user_id: int, user_role: int, db: Session
+        data: TestSeriesCreate,
+        user_id: int,
+        user_role: int,
+        db: Session
     ) -> TestSeriesResponse:
+
+        # Get organization
         if user_role == 0:
             org_id = 0
+
         elif user_role in (1, 2):
             membership = (
                 db.query(OrganizationUser)
-                .filter(OrganizationUser.user_id == user_id)
+                .filter(
+                    OrganizationUser.user_id == user_id
+                )
                 .order_by(OrganizationUser.org_id)
                 .first()
             )
+
             org_id = membership.org_id if membership else 0
+
         else:
-            raise TestSeriesPermissionError("Only roles 0, 1, and 2 can create test series")
+            raise TestSeriesPermissionError(
+                "Only roles 0, 1, and 2 can create test series"
+            )
 
-
+        # Validate questions
         question_query = db.query(Question).filter(
-            Question.id.in_(data.question_ids), Question.is_active.is_(True)
+            Question.id.in_(data.question_ids),
+            Question.is_active.is_(True)
         )
+
         question_query = QuestionController._apply_visibility_filter(
-            question_query, user_id, user_role, db
+            question_query,
+            user_id,
+            user_role,
+            db
         )
-        allowed_ids = {question.id for question in question_query.all()}
+
+        allowed_ids = {
+            question.id
+            for question in question_query.all()
+        }
+
         if allowed_ids != set(data.question_ids):
             raise TestSeriesQuestionError(
                 "One or more questions do not exist, are inactive, or are not accessible"
             )
 
+        # Generate invite token only for invite_only tests
         invite_token = (
-            secrets.token_urlsafe(24) if data.access_type == "invite_only" else None
+            secrets.token_urlsafe(24)
+            if data.access_type == "invite_only"
+            else None
         )
+
         series_code = secrets.token_hex(4).upper()
+
+        # Create test series
         series = TestSeries(
             code=series_code,
+
             invite_token_hash=(
-                hashlib.sha256(invite_token.encode()).hexdigest()
+                hashlib.sha256(
+                    invite_token.encode()
+                ).hexdigest()
                 if invite_token
                 else None
             ),
 
             access_type=data.access_type,
             name=data.name.strip(),
+
             org_id=org_id,
             created_by=user_id,
+
+            # Newly added columns
+            teacher_group_id=data.teacher_group_id,
+            supervisor_id=data.supervisor_id,
+
             valid_until=data.valid_until,
             duration_seconds=data.duration_seconds,
+
             is_active=data.is_active,
             is_result_show=data.is_result_show,
             is_score_show=data.is_score_show,
+
             series_questions=[
-                SeriesQuestion(question_id=question_id, position=position)
-                for position, question_id in enumerate(data.question_ids, start=1)
+                SeriesQuestion(
+                    question_id=question_id,
+                    position=position
+                )
+                for position, question_id in enumerate(
+                    data.question_ids,
+                    start=1
+                )
             ],
         )
+
         try:
             db.add(series)
+
+            # Generate series.id before creating test_access
+            db.flush()
+
+            # Private test access
+            if data.access_type == "private":
+
+                if data.batch_id is None:
+                    raise TestSeriesPermissionError(
+                        "batch_id is required for private test"
+                    )
+
+                test_access = TestAccess(
+                    test_series_id=series.id,
+                    batch_id=data.batch_id,
+                    granted_by=user_id,
+                )
+
+                db.add(test_access)
+
             db.commit()
+
         except Exception:
             db.rollback()
             raise
-        response = TestSeriesController._get_response(series.id, db)
+
+        response = TestSeriesController._get_response(
+            series.id,
+            db
+        )
+
         response.invite_token = invite_token
+
         return response
 
     @staticmethod
