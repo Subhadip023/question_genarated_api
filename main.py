@@ -35,6 +35,7 @@ from app.routes import (
     topic_routes,
     user_routes,
 )
+from app.routes.student_batch import router as student_batch_router
 
 # Configure logging so errors print to console with full tracebacks
 logging.basicConfig(
@@ -84,6 +85,7 @@ app.include_router(user_routes.router)
 app.include_router(auth_routes.router)
 app.include_router(organization_routes.router)
 app.include_router(diagram_routes.router)
+app.include_router(student_batch_router)
 
 
 
