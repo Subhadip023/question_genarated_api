@@ -59,3 +59,17 @@ class TestSeries(Base):
         default=False,
         nullable=False,
     )
+
+    teacher_group_id: Mapped[int | None] = mapped_column(
+        ForeignKey("teacher_groups.id"),
+        nullable=True,
+        default=None,
+        index=True,
+    )
+
+    supervisor_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id"),
+        nullable=True,
+        default=None,
+        index=True,
+    )

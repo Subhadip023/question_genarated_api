@@ -8,7 +8,9 @@ from pydantic import BaseModel, Field, field_validator
 
 class TestSeriesCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=255)
-    access_type: Literal["invite_only", "public"] = "invite_only"
+    access_type: Literal["invite_only", "public", "private"] = "invite_only"
+    teacher_group_id: int | None = None
+    supervisor_id: int | None = None
     valid_until: datetime
     duration_seconds: int = Field(..., gt=0)
     question_ids: list[int] = Field(default_factory=list)
@@ -42,6 +44,8 @@ class TestSeriesResponse(BaseModel):
 
     org_id: int
     created_by: int
+    teacher_group_id: int | None = None
+    supervisor_id: int | None = None
     valid_until: datetime
     duration_seconds: int
     is_active: bool
@@ -56,7 +60,9 @@ class TestSeriesResponse(BaseModel):
 
 class TestSeriesUpdate(BaseModel):
     name: str | None = Field(None, min_length=1, max_length=255)
-    access_type: Literal["invite_only", "public"] | None = None
+    access_type: Literal["invite_only", "public", "private"] | None = None
+    teacher_group_id: int | None = None
+    supervisor_id: int | None = None
     valid_until: datetime | None = None
     duration_seconds: int | None = Field(None, gt=0)
     question_ids: list[int] | None = Field(None)
