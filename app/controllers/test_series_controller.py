@@ -48,7 +48,6 @@ class TestSeriesController:
         user_role: int,
         db: Session
     ) -> TestSeriesResponse:
-
         # Get organization
         if user_role == 0:
             org_id = 0
@@ -133,8 +132,10 @@ class TestSeriesController:
                 raise TestSeriesPermissionError("Only supervisor and admin can publish test results")
 
         # Create test series
+        series_code = TestSeriesController._generate_unique_code(db)
+
         series = TestSeries(
-            code=series_code if series_code else None,
+            code=series_code,
 
             invite_token_hash=(
                 hashlib.sha256(
@@ -513,6 +514,17 @@ class TestSeriesController:
             average_score=round(avg_score, 2),
             results=items,
         )
+
+    @staticmethod
+    def _generate_unique_code(db: Session) -> str:
+        """Generate an unused 8-character test series code."""
+        alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+        for _ in range(100):
+            code = "".join(secrets.choice(alphabet) for _ in range(8))
+            exists = db.query(TestSeries.id).filter(TestSeries.code == code).first()
+            if exists is None:
+                return code
+        raise RuntimeError("Unable to generate a unique test series code")
 
     @staticmethod
     def _get_response(series_id: int, db: Session) -> TestSeriesResponse:
