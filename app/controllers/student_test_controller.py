@@ -7,15 +7,17 @@ import math
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
-from sqlalchemy import or_
+from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session, joinedload
 from app.models.user import User
 from app.constants.attempt_status import AttemptStatus
 
+from app.models.batch_student import BatchStudent
 from app.models.diagram import Diagram
 from app.models.organization_user import OrganizationUser
 from app.models.question import Question
 from app.models.series_question import SeriesQuestion
+from app.models.test_access import TestAccess
 from app.models.topic import Topic
 from app.models.test_attempt import AttemptQuestion, TestAttempt
 from app.models.test_series import TestSeries
@@ -63,6 +65,17 @@ class StudentTestController:
         StudentTestController._require_student(user_role)
         now = datetime.now(timezone.utc)
 
+        student_batch_ids = (
+            db.query(BatchStudent.batch_id)
+            .filter(BatchStudent.student_id == user_id)
+            .subquery()
+        )
+        student_private_series_ids = (
+            db.query(TestAccess.test_series_id)
+            .filter(TestAccess.batch_id.in_(student_batch_ids))
+            .subquery()
+        )
+
         query = (
             db.query(TestSeries)
             .options(
@@ -71,7 +84,13 @@ class StudentTestController:
                 .joinedload(Question.topic)
             )
             .filter(
-                TestSeries.access_type == "public",
+                or_(
+                    TestSeries.access_type == "public",
+                    and_(
+                        TestSeries.access_type == "private",
+                        TestSeries.id.in_(student_private_series_ids),
+                    ),
+                ),
                 TestSeries.is_active.is_(True),
                 TestSeries.valid_until > now,
                 ~db.query(TestAttempt)
@@ -141,6 +160,8 @@ class StudentTestController:
                     topics=topic_names,
                     is_result_show=item.is_result_show,
                     is_score_show=item.is_score_show,
+                    access_type=item.access_type or "public",
+                    is_private=(item.access_type == "private"),
                 )
             )
 

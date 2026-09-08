@@ -16,6 +16,8 @@ class AvailableSeriesResponse(BaseModel):
     topics: list[str] = Field(default_factory=list)
     is_result_show: bool = False
     is_score_show: bool = False
+    access_type: str = "public"
+    is_private: bool = False
 
 
 class PaginatedAvailableSeriesResponse(BaseModel):
