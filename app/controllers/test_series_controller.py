@@ -134,7 +134,7 @@ class TestSeriesController:
 
         # Create test series
         series = TestSeries(
-            code=series_code,
+            code=series_code if series_code else None,
 
             invite_token_hash=(
                 hashlib.sha256(
