@@ -118,6 +118,20 @@ class TestSeriesController:
                 if not membership:
                     raise TestSeriesPermissionError("Supervisor must belong to the organization")
 
+        # Restrict result publishing to supervisor and admin only
+        if data.is_result_show or data.is_score_show:
+            is_admin = (user_role == 0) or (user_role == 1)
+            is_supervisor = False
+            if data.supervisor_id and data.supervisor_id == user_id:
+                is_supervisor = True
+            elif data.teacher_group_id:
+                tg = db.query(TeacherGroup).filter(TeacherGroup.id == data.teacher_group_id, TeacherGroup.is_deleted.is_(False)).first()
+                if tg and tg.supervisor == user_id:
+                    is_supervisor = True
+
+            if not (is_admin or is_supervisor):
+                raise TestSeriesPermissionError("Only supervisor and admin can publish test results")
+
         # Create test series
         series = TestSeries(
             code=series_code,
@@ -202,9 +216,9 @@ class TestSeriesController:
             return None
 
         # Verify permission
-        is_authorized = False
-        if user_role == 0 and series.org_id == 0:
-            is_authorized = True
+        is_admin = False
+        if user_role == 0:
+            is_admin = True
         elif user_role == 1:
             membership = (
                 db.query(OrganizationUser)
@@ -213,14 +227,31 @@ class TestSeriesController:
                 .first()
             )
             if membership and membership.org_id == series.org_id:
-                is_authorized = True
-        elif series.created_by == user_id:
-            is_authorized = True
+                is_admin = True
+
+        is_supervisor = False
+        if series.supervisor_id and series.supervisor_id == user_id:
+            is_supervisor = True
+        elif series.teacher_group_id:
+            tg = (
+                db.query(TeacherGroup)
+                .filter(TeacherGroup.id == series.teacher_group_id, TeacherGroup.is_deleted.is_(False))
+                .first()
+            )
+            if tg and tg.supervisor == user_id:
+                is_supervisor = True
+
+        is_authorized = is_admin or is_supervisor or (series.created_by == user_id)
 
         if not is_authorized:
             raise TestSeriesPermissionError("You do not have permission to edit this test series")
 
         updates = data.model_dump(exclude_unset=True)
+
+        # Restrict result publication / score visibility changes to supervisor and admin only
+        if "is_result_show" in updates or "is_score_show" in updates:
+            if not (is_admin or is_supervisor):
+                raise TestSeriesPermissionError("Only supervisor and admin can publish or change test results visibility")
         question_ids = updates.pop("question_ids", None)
 
         if question_ids is not None:
@@ -271,15 +302,11 @@ class TestSeriesController:
             elif value is not None:
                 setattr(series, field, value)
 
-        # Handle access_type or batch_id updates for private tests
-        batch_id = updates.pop("batch_id", None)
-        if batch_id is not None and (updates.get("access_type") == "private" or series.access_type == "private"):
-            existing_access = (
-                db.query(TestAccess)
-                .filter(TestAccess.test_series_id == series_id, TestAccess.batch_id == batch_id)
-                .first()
-            )
-            if not existing_access:
+        # Handle batch_id updates for test access
+        if "batch_id" in updates:
+            batch_id = updates.pop("batch_id")
+            db.query(TestAccess).filter(TestAccess.test_series_id == series_id).delete()
+            if batch_id and batch_id > 0:
                 db.add(TestAccess(test_series_id=series_id, batch_id=batch_id, granted_by=user_id))
 
         # Handle invite token hash when access type changes
@@ -350,7 +377,7 @@ class TestSeriesController:
             attempt_counts = dict(counts)
 
         return [
-            TestSeriesController._serialize(item, attempt_count=attempt_counts.get(item.id, 0))
+            TestSeriesController._serialize(item, db=db, attempt_count=attempt_counts.get(item.id, 0))
             for item in items
         ]
 
@@ -372,7 +399,7 @@ class TestSeriesController:
             attempt_counts = dict(counts)
 
         return [
-            TestSeriesController._serialize(item, attempt_count=attempt_counts.get(item.id, 0))
+            TestSeriesController._serialize(item, db=db, attempt_count=attempt_counts.get(item.id, 0))
             for item in items
         ]
 
@@ -391,7 +418,7 @@ class TestSeriesController:
             .scalar()
             or 0
         )
-        return TestSeriesController._serialize(item, attempt_count=count)
+        return TestSeriesController._serialize(item, db=db, attempt_count=count)
 
     @staticmethod
     def _apply_visibility(query, user_id: int, user_role: int, db: Session):
@@ -501,10 +528,20 @@ class TestSeriesController:
             .scalar()
             or 0
         )
-        return TestSeriesController._serialize(item, attempt_count=count)
+        return TestSeriesController._serialize(item, db=db, attempt_count=count)
 
     @staticmethod
-    def _serialize(item: TestSeries, attempt_count: int = 0) -> TestSeriesResponse:
+    def _serialize(item: TestSeries, db: Session | None = None, attempt_count: int = 0) -> TestSeriesResponse:
+        batch_id = getattr(item, "batch_id", None)
+        if batch_id is None and db is not None:
+            access = (
+                db.query(TestAccess.batch_id)
+                .filter(TestAccess.test_series_id == item.id)
+                .first()
+            )
+            if access:
+                batch_id = access[0]
+
         return TestSeriesResponse(
             id=item.id,
             code=item.code,
@@ -515,6 +552,7 @@ class TestSeriesController:
             created_by=item.created_by,
             teacher_group_id=item.teacher_group_id,
             supervisor_id=item.supervisor_id,
+            batch_id=batch_id,
             valid_until=item.valid_until,
             duration_seconds=item.duration_seconds,
             is_active=item.is_active,

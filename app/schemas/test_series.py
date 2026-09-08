@@ -64,6 +64,7 @@ class TestSeriesResponse(BaseModel):
     created_by: int
     teacher_group_id: int | None = None
     supervisor_id: int | None = None
+    batch_id: int | None = None
     valid_until: datetime
     duration_seconds: int
     is_active: bool
