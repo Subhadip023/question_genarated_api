@@ -148,20 +148,13 @@ class TestSeriesController:
             # Generate series.id before creating test_access
             db.flush()
 
-            # Private test access
-            if data.access_type == "private":
-
-                if data.batch_id is None:
-                    raise TestSeriesPermissionError(
-                        "batch_id is required for private test"
-                    )
-
+            # Private test access (optional batch_id link)
+            if data.access_type == "private" and data.batch_id is not None:
                 test_access = TestAccess(
                     test_series_id=series.id,
                     batch_id=data.batch_id,
                     granted_by=user_id,
                 )
-
                 db.add(test_access)
 
             db.commit()
@@ -238,6 +231,17 @@ class TestSeriesController:
         for field, value in updates.items():
             if value is not None:
                 setattr(series, field, value)
+
+        # Handle access_type or batch_id updates for private tests
+        batch_id = updates.pop("batch_id", None)
+        if batch_id is not None and (updates.get("access_type") == "private" or series.access_type == "private"):
+            existing_access = (
+                db.query(TestAccess)
+                .filter(TestAccess.test_series_id == series_id, TestAccess.batch_id == batch_id)
+                .first()
+            )
+            if not existing_access:
+                db.add(TestAccess(test_series_id=series_id, batch_id=batch_id, granted_by=user_id))
 
         # Handle invite token hash when access type changes
         invite_token = None
