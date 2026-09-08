@@ -12,6 +12,7 @@ from app.models.diagram import Diagram
 from app.models.organization_user import OrganizationUser
 from app.models.question import Question
 from app.models.series_question import SeriesQuestion
+from app.models.teacher_group import TeacherGroup
 from app.models.test_attempt import TestAttempt
 from app.models.test_access import TestAccess
 from app.models.test_series import TestSeries
@@ -99,7 +100,23 @@ class TestSeriesController:
             else None
         )
 
-        series_code = secrets.token_hex(4).upper()
+        # Validate teacher_group_id belongs to organization if provided
+        if data.teacher_group_id is not None:
+            tg = db.query(TeacherGroup).filter(TeacherGroup.id == data.teacher_group_id, TeacherGroup.is_deleted.is_(False)).first()
+            if not tg:
+                raise TestSeriesPermissionError("Teacher group not found")
+            if org_id != 0 and tg.org_id != org_id:
+                raise TestSeriesPermissionError("Teacher group must belong to the organization")
+
+        # Validate supervisor_id belongs to organization if provided
+        if data.supervisor_id is not None:
+            sup = db.query(User).filter(User.id == data.supervisor_id).first()
+            if not sup:
+                raise TestSeriesPermissionError("Supervisor user not found")
+            if org_id != 0:
+                membership = db.query(OrganizationUser).filter(OrganizationUser.user_id == data.supervisor_id, OrganizationUser.org_id == org_id).first()
+                if not membership:
+                    raise TestSeriesPermissionError("Supervisor must belong to the organization")
 
         # Create test series
         series = TestSeries(
@@ -228,8 +245,30 @@ class TestSeriesController:
                 for pos, qid in enumerate(question_ids, start=1)
             ]
 
+        # Validate teacher_group_id if updated
+        if "teacher_group_id" in updates and updates["teacher_group_id"] is not None:
+            tg_id = updates["teacher_group_id"]
+            tg = db.query(TeacherGroup).filter(TeacherGroup.id == tg_id, TeacherGroup.is_deleted.is_(False)).first()
+            if not tg:
+                raise TestSeriesPermissionError("Teacher group not found")
+            if series.org_id != 0 and tg.org_id != series.org_id:
+                raise TestSeriesPermissionError("Teacher group must belong to the organization")
+
+        # Validate supervisor_id if updated
+        if "supervisor_id" in updates and updates["supervisor_id"] is not None:
+            sup_id = updates["supervisor_id"]
+            sup = db.query(User).filter(User.id == sup_id).first()
+            if not sup:
+                raise TestSeriesPermissionError("Supervisor user not found")
+            if series.org_id != 0:
+                membership = db.query(OrganizationUser).filter(OrganizationUser.user_id == sup_id, OrganizationUser.org_id == series.org_id).first()
+                if not membership:
+                    raise TestSeriesPermissionError("Supervisor must belong to the organization")
+
         for field, value in updates.items():
-            if value is not None:
+            if field in ("teacher_group_id", "supervisor_id"):
+                setattr(series, field, value)
+            elif value is not None:
                 setattr(series, field, value)
 
         # Handle access_type or batch_id updates for private tests
@@ -474,6 +513,8 @@ class TestSeriesController:
             name=item.name,
             org_id=item.org_id,
             created_by=item.created_by,
+            teacher_group_id=item.teacher_group_id,
+            supervisor_id=item.supervisor_id,
             valid_until=item.valid_until,
             duration_seconds=item.duration_seconds,
             is_active=item.is_active,
