@@ -128,9 +128,13 @@ class StudentBatchController:
         if payload.supervisor is not None:
             supervisor = (
                 db.query(User)
+                .join(
+                    OrganizationUser,
+                    OrganizationUser.user_id == User.id,
+                )
                 .filter(
                     User.id == payload.supervisor,
-                    User.org_id == org_id,
+                    OrganizationUser.org_id == org_id,
                 )
                 .first()
             )
