@@ -61,6 +61,7 @@ class StudentTestController:
         sort_order: str = "asc",
         page: int = 1,
         limit: int = 10,
+        access_type: str | None = None,
     ) -> PaginatedAvailableSeriesResponse:
         StudentTestController._require_student(user_role)
         now = datetime.now(timezone.utc)
@@ -76,6 +77,28 @@ class StudentTestController:
             .subquery()
         )
 
+        base_access_filter = or_(
+            TestSeries.access_type == "public",
+            TestSeries.access_type.is_(None),
+            and_(
+                TestSeries.access_type == "private",
+                TestSeries.id.in_(student_private_series_ids),
+            ),
+        )
+
+        if access_type == "private" or access_type == "organization":
+            access_filter = and_(
+                TestSeries.access_type == "private",
+                TestSeries.id.in_(student_private_series_ids),
+            )
+        elif access_type == "public":
+            access_filter = or_(
+                TestSeries.access_type == "public",
+                TestSeries.access_type.is_(None),
+            )
+        else:
+            access_filter = base_access_filter
+
         query = (
             db.query(TestSeries)
             .options(
@@ -84,13 +107,7 @@ class StudentTestController:
                 .joinedload(Question.topic)
             )
             .filter(
-                or_(
-                    TestSeries.access_type == "public",
-                    and_(
-                        TestSeries.access_type == "private",
-                        TestSeries.id.in_(student_private_series_ids),
-                    ),
-                ),
+                access_filter,
                 TestSeries.is_active.is_(True),
                 TestSeries.valid_until > now,
                 ~db.query(TestAttempt)

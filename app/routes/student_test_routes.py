@@ -47,6 +47,7 @@ def list_public_tests(
     sort_order: str = "asc",
     page: int = 1,
     limit: int = 10,
+    access_type: str | None = None,
     db: Session = Depends(get_db),
 ) -> PaginatedAvailableSeriesResponse:
     return _call(
@@ -60,6 +61,7 @@ def list_public_tests(
             sort_order=sort_order,
             page=page,
             limit=limit,
+            access_type=access_type,
         )
     )
 
