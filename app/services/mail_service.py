@@ -34,7 +34,7 @@ def send_email(
         send_email(
             to_email="user@example.com",
             subject="Hello",
-            body="<h1>Welcome to QMaster</h1>"
+            body="<h1>Welcome to Safalya</h1>"
         )
     """
     if not to_email or not to_email.strip():

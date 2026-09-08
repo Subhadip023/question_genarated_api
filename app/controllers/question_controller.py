@@ -36,7 +36,7 @@ class QuestionController:
     @staticmethod
     def get_welcome() -> dict:
         """Return welcome message."""
-        return {"message": "Welcome to QMaster!"}
+        return {"message": "Welcome to Safalya!"}
 
     @staticmethod
     def create_question(

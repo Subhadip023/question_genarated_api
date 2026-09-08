@@ -1,5 +1,5 @@
 -- ============================================================
--- QMaster — Complete Database Setup SQL
+-- Safalya — Complete Database Setup SQL
 -- Run this in phpMyAdmin: http://209.38.120.20/phpmyadmin/
 -- Database: db_test
 -- ============================================================

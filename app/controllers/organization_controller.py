@@ -89,9 +89,9 @@ class OrganizationController:
         try:
             res = MailService.send_mail(
                 to_email=admin.email,
-                subject="Welcome to QMaster - Your organization account",
+                subject="Welcome to Safalya - Your organization account",
                 body=(
-                    "Welcome to QMaster\n\n"
+                    "Welcome to Safalya\n\n"
                     "Your organization has been created.\n\n"
                     f"Organization name: {organization.name}\n"
                     f"Email: {admin.email}\n"
@@ -190,7 +190,7 @@ class OrganizationController:
         try:
             MailService.send_mail(
                 to_email=user.email,
-                subject=f"Welcome to {organization.name} on QMaster",
+                subject=f"Welcome to {organization.name} on Safalya",
                 body=(
                     f"Hello {user.name},\n\n"
                     f"You have been added to {organization.name} as a {role_name}.\n\n"
