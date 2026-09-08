@@ -31,6 +31,7 @@ class OrganizationResponse(BaseModel):
     code: str
     location: str | None
     phone_number: str | None
+    logo: str | None
     is_active: bool
 
     model_config = {"from_attributes": True}

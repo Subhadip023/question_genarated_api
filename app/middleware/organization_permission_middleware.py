@@ -36,6 +36,27 @@ class OrganizationPermissionMiddleware(BaseHTTPMiddleware):
                     status_code=403,
                     content={"detail": "Only a superadmin can delete an organization"},
                 )
+        if (
+            request.method == "POST"
+            and path.startswith("/organizations/")
+            and path.endswith("/logo")
+        ):
+            try:
+                organization_id = int(path.split("/")[2])
+            except (IndexError, ValueError):
+                return await call_next(request)
+
+            role = getattr(request.state, "user_role", None)
+            user_id = getattr(request.state, "user_id", None)
+            if role != 0 and not self.is_organization_admin(
+                user_id, organization_id, role
+            ):
+                return JSONResponse(
+                    status_code=403,
+                    content={
+                        "detail": "Only this organization's admin can update its logo"
+                    },
+                )
         return await call_next(request)
 
     @staticmethod

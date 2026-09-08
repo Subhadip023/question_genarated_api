@@ -1,6 +1,6 @@
 """HTTP routes for organizations."""
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
 from sqlalchemy.orm import Session
 
 from app.controllers.organization_controller import (
@@ -123,6 +123,22 @@ def update_organization(
     organization = OrganizationController.update_organization(
         organization_id, data, db
     )
+    if organization is None:
+        raise HTTPException(status_code=404, detail="Organization not found")
+    return organization
+
+
+@router.post(
+    "/{organization_id}/logo",
+    response_model=OrganizationResponse,
+    summary="Upload or replace an organization's logo",
+)
+def upload_organization_logo(
+    organization_id: int,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+) -> OrganizationResponse:
+    organization = OrganizationController.update_logo(organization_id, file, db)
     if organization is None:
         raise HTTPException(status_code=404, detail="Organization not found")
     return organization

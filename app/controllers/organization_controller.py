@@ -3,6 +3,7 @@
 import logging
 import secrets
 
+from fastapi import UploadFile
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -18,6 +19,7 @@ from app.schemas.organization import (
 )
 from app.schemas.user import UserCreate, UserResponse
 from app.services.auth_service import hash_password
+from app.services.file_service import FileService
 from app.services.mail_service import MailService, MailServiceError
 
 logger = logging.getLogger(__name__)
@@ -277,6 +279,35 @@ class OrganizationController:
         except Exception:
             db.rollback()
             raise
+        return OrganizationResponse.model_validate(organization)
+
+    @staticmethod
+    def update_logo(
+        organization_id: int, file: UploadFile, db: Session
+    ) -> OrganizationResponse | None:
+        """Upload a new logo image for an organization, replacing any existing one."""
+        organization = (
+            db.query(Organization)
+            .filter(Organization.id == organization_id)
+            .first()
+        )
+        if organization is None:
+            return None
+
+        old_logo = organization.logo
+        new_path = FileService.upload_image(source=file, subfolder="logos")
+        organization.logo = new_path
+
+        try:
+            db.commit()
+            db.refresh(organization)
+            if old_logo and old_logo != new_path:
+                FileService.delete_file(old_logo)
+        except Exception:
+            db.rollback()
+            FileService.delete_file(new_path)
+            raise
+
         return OrganizationResponse.model_validate(organization)
 
     @staticmethod
