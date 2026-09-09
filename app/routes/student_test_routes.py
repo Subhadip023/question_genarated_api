@@ -15,6 +15,7 @@ from app.schemas.student_test import (
     AttemptHistoryResponse,
     AttemptResponse,
     AvailableSeriesResponse,
+    InviteInfoResponse,
     PaginatedAvailableSeriesResponse,
     SaveAnswerRequest,
     StartAttemptRequest,
@@ -65,6 +66,13 @@ def list_public_tests(
         )
     )
 
+
+
+@router.get("/test-series/invite-info", response_model=InviteInfoResponse)
+def get_invite_info(
+    token: str, db: Session = Depends(get_db)
+) -> InviteInfoResponse:
+    return _call(lambda: StudentTestController.get_invite_info(token, db))
 
 
 @router.post("/test-series/start", response_model=AttemptResponse, status_code=201)

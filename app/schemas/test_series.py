@@ -92,6 +92,7 @@ class TestSeriesUpdate(BaseModel):
     is_active: bool | None = None
     is_result_show: bool | None = None
     is_score_show: bool | None = None
+    regenerate_invite_token: bool | None = None
 
     @field_validator("valid_until")
     @classmethod

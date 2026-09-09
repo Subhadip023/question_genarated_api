@@ -27,6 +27,7 @@ from app.schemas.student_test import (
     AttemptQuestionResponse,
     AttemptResponse,
     AvailableSeriesResponse,
+    InviteInfoResponse,
     PaginatedAvailableSeriesResponse,
     StartAttemptRequest,
     SubmitAttemptRequest,
@@ -193,6 +194,45 @@ class StudentTestController:
 
 
     @staticmethod
+    def get_invite_info(token: str, db: Session) -> InviteInfoResponse:
+        token = (token or "").strip()
+        if not token:
+            raise StudentTestNotFoundError("Invite token is required")
+
+        token_hash = hashlib.sha256(token.encode()).hexdigest()
+        conditions = [
+            TestSeries.invite_token == token,
+            TestSeries.invite_token_hash == token_hash,
+            TestSeries.code == token,
+        ]
+        if token.isdigit():
+            conditions.append(TestSeries.id == int(token))
+
+        series = (
+            db.query(TestSeries)
+            .options(joinedload(TestSeries.series_questions))
+            .filter(or_(*conditions))
+            .first()
+        )
+        if not series:
+            raise StudentTestNotFoundError("Test series not found or invite token is invalid")
+
+        now = datetime.now(timezone.utc)
+        valid_until_utc = StudentTestController._as_utc(series.valid_until)
+        is_expired = valid_until_utc <= now
+
+        return InviteInfoResponse(
+            id=series.id,
+            name=series.name,
+            duration_seconds=series.duration_seconds,
+            question_count=len(series.series_questions),
+            valid_until=series.valid_until,
+            is_active=bool(series.is_active),
+            is_expired=is_expired,
+            access_type=series.access_type,
+        )
+
+    @staticmethod
     def start(
         data: StartAttemptRequest, user_id: int, user_role: int, db: Session
     ) -> AttemptResponse:
@@ -210,6 +250,7 @@ class StudentTestController:
             token_hash = hashlib.sha256(token.encode()).hexdigest()
 
             conditions = [
+                TestSeries.invite_token == token,
                 TestSeries.invite_token_hash == token_hash,
                 TestSeries.code == token,
             ]

@@ -20,6 +20,17 @@ class AvailableSeriesResponse(BaseModel):
     is_private: bool = False
 
 
+class InviteInfoResponse(BaseModel):
+    id: int
+    name: str
+    duration_seconds: int
+    question_count: int
+    valid_until: datetime
+    is_active: bool
+    is_expired: bool
+    access_type: str = "invite_only"
+
+
 class PaginatedAvailableSeriesResponse(BaseModel):
     items: list[AvailableSeriesResponse]
     total: int
@@ -32,7 +43,7 @@ class PaginatedAvailableSeriesResponse(BaseModel):
 
 class StartAttemptRequest(BaseModel):
     series_id: int | None = None
-    invite_token: str | None = Field(default=None, min_length=8, max_length=255)
+    invite_token: str | None = Field(default=None, min_length=1, max_length=255)
     start_test: int = 0
 
     @model_validator(mode="after")

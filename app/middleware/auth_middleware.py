@@ -18,6 +18,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
         "/auth/login",
         "/auth/register",
         "/openapi.json",
+        "/student/test-series/invite-info",
     }
     PUBLIC_PREFIXES = ("/docs", "/redoc")
     MAIL_PATHS = {"/mail/send", "/send-mail"}

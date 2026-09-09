@@ -137,7 +137,7 @@ class TestSeriesController:
 
         series = TestSeries(
             code=series_code,
-
+            invite_token=invite_token,
             invite_token_hash=(
                 hashlib.sha256(
                     invite_token.encode()
@@ -327,14 +327,21 @@ class TestSeriesController:
             for b_id in new_batch_ids:
                 db.add(TestAccess(test_series_id=series_id, batch_id=b_id, granted_by=user_id))
 
-        # Handle invite token hash when access type changes
+        # Handle invite token hash when access type changes or regeneration requested
         invite_token = None
-        if "access_type" in updates:
-            if updates["access_type"] == "invite_only" and not series.invite_token_hash:
+        regenerate = updates.pop("regenerate_invite_token", False)
+        next_access_type = updates.get("access_type", series.access_type)
+
+        if next_access_type == "invite_only":
+            if not series.invite_token or regenerate or (updates.get("access_type") == "invite_only" and not series.invite_token_hash):
                 invite_token = secrets.token_urlsafe(24)
+                series.invite_token = invite_token
                 series.invite_token_hash = hashlib.sha256(invite_token.encode()).hexdigest()
-            elif updates["access_type"] == "public":
-                series.invite_token_hash = None
+            else:
+                invite_token = series.invite_token
+        elif "access_type" in updates and updates["access_type"] != "invite_only":
+            series.invite_token = None
+            series.invite_token_hash = None
 
         try:
             db.commit()
@@ -570,10 +577,23 @@ class TestSeriesController:
 
         batch_id = batch_ids[0] if batch_ids else getattr(item, "batch_id", None)
 
+        invite_tok = getattr(item, "invite_token", None)
+        if item.access_type == "invite_only":
+            if not invite_tok and db is not None:
+                invite_tok = secrets.token_urlsafe(24)
+                item.invite_token = invite_tok
+                item.invite_token_hash = hashlib.sha256(invite_tok.encode()).hexdigest()
+                try:
+                    db.commit()
+                except Exception:
+                    db.rollback()
+        else:
+            invite_tok = None
+
         return TestSeriesResponse(
             id=item.id,
             code=item.code,
-            invite_token=None,
+            invite_token=invite_tok,
             access_type=item.access_type,
             name=item.name,
             org_id=item.org_id,
