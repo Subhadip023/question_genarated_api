@@ -1,5 +1,6 @@
 """Business logic for test-series management."""
 
+from collections import defaultdict
 import secrets
 import hashlib
 
@@ -180,14 +181,19 @@ class TestSeriesController:
             # Generate series.id before creating test_access
             db.flush()
 
-            # Private test access (optional batch_id link)
-            if data.access_type == "private" and data.batch_id is not None:
-                test_access = TestAccess(
-                    test_series_id=series.id,
-                    batch_id=data.batch_id,
-                    granted_by=user_id,
-                )
-                db.add(test_access)
+            # Test access (optional batch_ids / batch_id link)
+            target_batch_ids = list(data.batch_ids or [])
+            if data.batch_id is not None and data.batch_id not in target_batch_ids:
+                target_batch_ids.append(data.batch_id)
+
+            for b_id in set(target_batch_ids):
+                if b_id and b_id > 0:
+                    test_access = TestAccess(
+                        test_series_id=series.id,
+                        batch_id=b_id,
+                        granted_by=user_id,
+                    )
+                    db.add(test_access)
 
             db.commit()
 
@@ -303,12 +309,23 @@ class TestSeriesController:
             elif value is not None:
                 setattr(series, field, value)
 
-        # Handle batch_id updates for test access
-        if "batch_id" in updates:
-            batch_id = updates.pop("batch_id")
+        # Handle batch_ids / batch_id updates for test access
+        if "batch_ids" in updates or "batch_id" in updates:
+            new_batch_ids = []
+            if "batch_ids" in updates:
+                raw_ids = updates.pop("batch_ids")
+                if raw_ids:
+                    new_batch_ids.extend([b for b in raw_ids if b and b > 0])
+            if "batch_id" in updates:
+                b_id = updates.pop("batch_id")
+                if b_id and b_id > 0 and b_id not in new_batch_ids:
+                    new_batch_ids.append(b_id)
+
+            new_batch_ids = list(set(new_batch_ids))
+
             db.query(TestAccess).filter(TestAccess.test_series_id == series_id).delete()
-            if batch_id and batch_id > 0:
-                db.add(TestAccess(test_series_id=series_id, batch_id=batch_id, granted_by=user_id))
+            for b_id in new_batch_ids:
+                db.add(TestAccess(test_series_id=series_id, batch_id=b_id, granted_by=user_id))
 
         # Handle invite token hash when access type changes
         invite_token = None
@@ -368,6 +385,7 @@ class TestSeriesController:
         series_ids = [item.id for item in items]
 
         attempt_counts = {}
+        batch_ids_map = defaultdict(list)
         if series_ids:
             counts = (
                 db.query(TestAttempt.series_id, func.count(TestAttempt.id))
@@ -377,30 +395,21 @@ class TestSeriesController:
             )
             attempt_counts = dict(counts)
 
-        return [
-            TestSeriesController._serialize(item, db=db, attempt_count=attempt_counts.get(item.id, 0))
-            for item in items
-        ]
-
-    @staticmethod
-    def list_for_user(user_id: int, user_role: int, db: Session) -> list[TestSeriesResponse]:
-        query = db.query(TestSeries).options(joinedload(TestSeries.series_questions))
-        query = TestSeriesController._apply_visibility(query, user_id, user_role, db)
-        items = query.all()
-        series_ids = [item.id for item in items]
-
-        attempt_counts = {}
-        if series_ids:
-            counts = (
-                db.query(TestAttempt.series_id, func.count(TestAttempt.id))
-                .filter(TestAttempt.series_id.in_(series_ids))
-                .group_by(TestAttempt.series_id)
+            access_records = (
+                db.query(TestAccess.test_series_id, TestAccess.batch_id)
+                .filter(TestAccess.test_series_id.in_(series_ids))
                 .all()
             )
-            attempt_counts = dict(counts)
+            for s_id, b_id in access_records:
+                batch_ids_map[s_id].append(b_id)
 
         return [
-            TestSeriesController._serialize(item, db=db, attempt_count=attempt_counts.get(item.id, 0))
+            TestSeriesController._serialize(
+                item,
+                db=db,
+                attempt_count=attempt_counts.get(item.id, 0),
+                batch_ids=batch_ids_map.get(item.id, []),
+            )
             for item in items
         ]
 
@@ -543,16 +552,23 @@ class TestSeriesController:
         return TestSeriesController._serialize(item, db=db, attempt_count=count)
 
     @staticmethod
-    def _serialize(item: TestSeries, db: Session | None = None, attempt_count: int = 0) -> TestSeriesResponse:
-        batch_id = getattr(item, "batch_id", None)
-        if batch_id is None and db is not None:
-            access = (
+    def _serialize(
+        item: TestSeries,
+        db: Session | None = None,
+        attempt_count: int = 0,
+        batch_ids: list[int] | None = None,
+    ) -> TestSeriesResponse:
+        if batch_ids is None and db is not None:
+            records = (
                 db.query(TestAccess.batch_id)
                 .filter(TestAccess.test_series_id == item.id)
-                .first()
+                .all()
             )
-            if access:
-                batch_id = access[0]
+            batch_ids = [r[0] for r in records]
+        elif batch_ids is None:
+            batch_ids = []
+
+        batch_id = batch_ids[0] if batch_ids else getattr(item, "batch_id", None)
 
         return TestSeriesResponse(
             id=item.id,
@@ -565,6 +581,7 @@ class TestSeriesController:
             teacher_group_id=item.teacher_group_id,
             supervisor_id=item.supervisor_id,
             batch_id=batch_id,
+            batch_ids=batch_ids,
             valid_until=item.valid_until,
             duration_seconds=item.duration_seconds,
             is_active=item.is_active,
