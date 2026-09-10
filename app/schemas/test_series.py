@@ -18,6 +18,7 @@ class TestSeriesCreate(BaseModel):
     teacher_group_id: int | None = None
     supervisor_id: int | None = None
     batch_id: int | None = None
+    student_ids: list[int] | None = None
 
     valid_until: datetime
     duration_seconds: int = Field(..., gt=0)
@@ -65,6 +66,7 @@ class TestSeriesResponse(BaseModel):
     teacher_group_id: int | None = None
     supervisor_id: int | None = None
     batch_id: int | None = None
+    student_ids: list[int] = Field(default_factory=list)
     valid_until: datetime
     duration_seconds: int
     is_active: bool
@@ -83,6 +85,7 @@ class TestSeriesUpdate(BaseModel):
     teacher_group_id: int | None = None
     supervisor_id: int | None = None
     batch_id: int | None = None
+    student_ids: list[int] | None = None
     valid_until: datetime | None = None
     duration_seconds: int | None = Field(None, gt=0)
     question_ids: list[int] | None = Field(None)
