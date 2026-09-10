@@ -18,6 +18,7 @@ class TestSeriesCreate(BaseModel):
     teacher_group_id: int | None = None
     supervisor_id: int | None = None
     batch_id: int | None = None
+    batch_ids: list[int] = Field(default_factory=list)
     student_ids: list[int] | None = None
 
     valid_until: datetime
@@ -66,6 +67,7 @@ class TestSeriesResponse(BaseModel):
     teacher_group_id: int | None = None
     supervisor_id: int | None = None
     batch_id: int | None = None
+    batch_ids: list[int] = Field(default_factory=list)
     student_ids: list[int] = Field(default_factory=list)
     valid_until: datetime
     duration_seconds: int
@@ -85,6 +87,7 @@ class TestSeriesUpdate(BaseModel):
     teacher_group_id: int | None = None
     supervisor_id: int | None = None
     batch_id: int | None = None
+    batch_ids: list[int] | None = None
     student_ids: list[int] | None = None
     valid_until: datetime | None = None
     duration_seconds: int | None = Field(None, gt=0)
@@ -92,6 +95,7 @@ class TestSeriesUpdate(BaseModel):
     is_active: bool | None = None
     is_result_show: bool | None = None
     is_score_show: bool | None = None
+    regenerate_invite_token: bool | None = None
 
     @field_validator("valid_until")
     @classmethod

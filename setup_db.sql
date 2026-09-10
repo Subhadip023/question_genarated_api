@@ -91,6 +91,7 @@ CREATE TABLE IF NOT EXISTS topics (
 CREATE TABLE IF NOT EXISTS test_series (
     id INTEGER NOT NULL AUTO_INCREMENT,
     code VARCHAR(8) NULL UNIQUE,
+    invite_token VARCHAR(255) NULL UNIQUE,
     name VARCHAR(255) NOT NULL,
     access_type ENUM('public', 'invite_only') NOT NULL DEFAULT 'public',
     invite_token_hash VARCHAR(64) NULL,

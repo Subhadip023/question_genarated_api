@@ -15,6 +15,9 @@ class TestSeries(Base):
     code: Mapped[str | None] = mapped_column(
         String(8), unique=True, index=True, nullable=True
     )
+    invite_token: Mapped[str | None] = mapped_column(
+        String(255), unique=True, index=True, nullable=True
+    )
     invite_token_hash: Mapped[str | None] = mapped_column(
         String(64), unique=True, index=True, nullable=True
     )
