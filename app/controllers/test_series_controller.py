@@ -4,6 +4,9 @@ from collections import defaultdict
 import secrets
 import hashlib
 from datetime import datetime
+from pathlib import Path
+
+from fastapi import UploadFile
 
 from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
@@ -28,6 +31,7 @@ from app.schemas.test_series import (
     TestSeriesResultsResponse,
     TestSeriesUpdate,
 )
+from app.config import settings
 
 
 
@@ -610,6 +614,69 @@ class TestSeriesController:
             average_score=round(avg_score, 2),
             results=items,
         )
+
+    @staticmethod
+    def upload_result_sheet(
+        series_id: int,
+        file: UploadFile,
+        user_id: int,
+        user_role: int,
+        db: Session
+    ) -> dict:
+        series = db.query(TestSeries).filter(TestSeries.id == series_id).first()
+        if not series:
+            raise ValueError("Test series not found")
+
+        # Verify permission
+        is_admin = False
+        if user_role == 0:
+            is_admin = True
+        elif user_role == 1:
+            membership = (
+                db.query(OrganizationUser)
+                .filter(OrganizationUser.user_id == user_id)
+                .order_by(OrganizationUser.org_id)
+                .first()
+            )
+            if membership and membership.org_id == series.org_id:
+                is_admin = True
+
+        is_supervisor = False
+        if series.supervisor_id and series.supervisor_id == user_id:
+            is_supervisor = True
+        elif series.teacher_group_id:
+            tg = (
+                db.query(TeacherGroup)
+                .filter(TeacherGroup.id == series.teacher_group_id, TeacherGroup.is_deleted.is_(False))
+                .first()
+            )
+            if tg and tg.supervisor == user_id:
+                is_supervisor = True
+
+        is_authorized = is_admin or is_supervisor or (series.created_by == user_id)
+
+        if not is_authorized:
+            raise TestSeriesPermissionError("You do not have permission to upload a result sheet for this test series")
+
+        filename = file.filename or ""
+        if not filename.lower().endswith(".pdf"):
+            raise ValueError("Only PDF files are allowed")
+
+        # Construct target directory: uploads/results/series_{series_id}/
+        base_upload_dir = Path(settings.upload_dir)
+        target_dir = base_upload_dir / "results" / f"series_{series_id}"
+        target_dir.mkdir(parents=True, exist_ok=True)
+
+        file_path = target_dir / "result.pdf"
+
+        try:
+            content = file.file.read()
+            with open(file_path, "wb") as f:
+                f.write(content)
+        except Exception as exc:
+            raise RuntimeError(f"Failed to save result sheet: {str(exc)}") from exc
+        
+        return {"message": "Result sheet uploaded successfully", "path": file_path.as_posix()}
 
     @staticmethod
     def _generate_unique_code(db: Session) -> str:
