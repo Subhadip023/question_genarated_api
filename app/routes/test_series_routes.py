@@ -1,6 +1,6 @@
 """Authenticated test-series management routes."""
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status, UploadFile, File
 from sqlalchemy.orm import Session
 
 from app.controllers.test_series_controller import (
@@ -35,6 +35,24 @@ def get_test_series_results(
         print(f"Error fetching results for test series {series_id}: {exc}\n{traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=f"Error fetching test series results: {str(exc)}") from None
 
+
+@router.post("/{series_id}/result-sheet")
+def upload_result_sheet(
+    series_id: int,
+    request: Request,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+):
+    try:
+        return TestSeriesController.upload_result_sheet(
+            series_id, file, request.state.user_id, request.state.user_role, db
+        )
+    except TestSeriesPermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from None
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from None
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to upload result sheet: {str(exc)}") from None
 
 
 @router.post("/", response_model=TestSeriesResponse, status_code=status.HTTP_201_CREATED)
