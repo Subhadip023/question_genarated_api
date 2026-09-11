@@ -4,7 +4,7 @@ The DATABASE_URL is built from MYSQL_* env vars via app.config.settings.
 
 pool_pre_ping=True   → tests every connection before use; silently reconnects if stale
 pool_recycle=55      → recycles connections every 55s (below freesqldatabase.com's ~60s timeout)
-pool_size / max_overflow → safe limits for a free-tier DB with max 1 concurrent connection
+pool_size / max_overflow → limits increased to handle higher concurrent loads
 """
 
 from sqlalchemy import create_engine
@@ -16,8 +16,8 @@ engine = create_engine(
     settings.database_url_object,  # URL object handles special chars (e.g. @ in password)
     pool_pre_ping=True,      # ping before each use — auto-reconnects on stale connections
     pool_recycle=55,         # recycle connections every 55s (MySQL drops idle after ~60s)
-    pool_size=2,             # max persistent connections in pool
-    max_overflow=3,          # extra connections allowed under peak load
+    pool_size=10,            # max persistent connections in pool
+    max_overflow=10,         # extra connections allowed under peak load
     pool_timeout=30,         # seconds to wait for a connection before raising an error
 )
 
