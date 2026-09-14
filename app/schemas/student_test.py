@@ -86,6 +86,7 @@ class AttemptResponse(BaseModel):
     total_marks: Decimal
     is_result_show: bool = False
     is_score_show: bool = False
+    result_file_key: str | None = None
     questions: list[AttemptQuestionResponse]
 
 
