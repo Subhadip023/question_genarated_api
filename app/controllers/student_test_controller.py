@@ -4,8 +4,11 @@ import hmac
 import json
 import hashlib
 import math
+from pathlib import Path
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
+
+from app.config import settings
 
 from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session, joinedload
@@ -741,6 +744,11 @@ class StudentTestController:
                 )
             )
 
+        base_upload_dir = Path(settings.upload_dir)
+        file_path = base_upload_dir / "results" / f"series_{series.id}" / "result.pdf" if series else None
+        has_pdf = bool(file_path and file_path.exists()) and (is_staff or is_result_show)
+        result_file_key = f"uploads/results/series_{series.id}/result.pdf" if has_pdf else None
+
         return AttemptResponse(
             id=attempt.id,
             series_id=attempt.series_id,
@@ -753,6 +761,7 @@ class StudentTestController:
             total_marks=attempt.total_marks,
             is_result_show=True if is_staff else is_result_show,
             is_score_show=True if is_staff else is_score_show,
+            result_file_key=result_file_key,
             questions=serialized_questions,
         )
 
