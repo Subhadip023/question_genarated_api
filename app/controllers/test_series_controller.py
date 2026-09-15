@@ -23,6 +23,7 @@ from app.models.teacher_group import TeacherGroup
 from app.models.test_attempt import TestAttempt
 from app.models.test_access import TestAccess
 from app.models.test_series import TestSeries
+from app.models.answer_key import AnswerKey
 from app.models.user import User
 from app.schemas.test_series import (
     TestSeriesCreate,
@@ -603,7 +604,8 @@ class TestSeriesController:
 
         base_upload_dir = Path(settings.upload_dir)
         file_path = base_upload_dir / "results" / f"series_{series.id}" / "result.pdf"
-        result_file_key = f"uploads/results/series_{series.id}/result.pdf" if file_path.exists() else None
+        ak = db.query(AnswerKey).filter(AnswerKey.test_series_id == series.id).first()
+        result_file_key = ak.path if ak else (f"uploads/results/series_{series.id}/result.pdf" if file_path.exists() else None)
 
         return TestSeriesResultsResponse(
             series_id=series.id,
@@ -680,7 +682,29 @@ class TestSeriesController:
         except Exception as exc:
             raise RuntimeError(f"Failed to save result sheet: {str(exc)}") from exc
         
-        return {"message": "Result sheet uploaded successfully", "path": file_path.as_posix()}
+        saved_path = file_path.as_posix()
+
+        # Insert or update record in answer_keys table
+        existing_ak = db.query(AnswerKey).filter(AnswerKey.test_series_id == series_id).first()
+        if existing_ak:
+            existing_ak.path = saved_path
+            db.commit()
+            db.refresh(existing_ak)
+            ak_record = existing_ak
+        else:
+            ak_record = AnswerKey(test_series_id=series_id, path=saved_path)
+            db.add(ak_record)
+            db.commit()
+            db.refresh(ak_record)
+
+        return {
+            "id": ak_record.id,
+            "test_series_id": ak_record.test_series_id,
+            "path": ak_record.path,
+            "created_at": ak_record.created_at.isoformat() if ak_record.created_at else None,
+            "updated_at": ak_record.updated_at.isoformat() if ak_record.updated_at else None,
+            "message": "Result sheet uploaded successfully",
+        }
 
     @staticmethod
     def _generate_unique_code(db: Session) -> str:
