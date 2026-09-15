@@ -31,6 +31,7 @@ class OrganizationResponse(BaseModel):
     code: str
     location: str | None
     phone_number: str | None
+    email: str | None = None
     logo: str | None
     is_active: bool
 
@@ -43,6 +44,7 @@ class OrganizationUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=255)
     location: str | None = Field(default=None, min_length=1, max_length=255)
     phone_number: str | None = Field(default=None, min_length=5, max_length=30)
+    email: str | None = Field(default=None, max_length=255)
     is_active: bool | None = None
 
     model_config = ConfigDict(extra="forbid")

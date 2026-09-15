@@ -270,6 +270,8 @@ class OrganizationController:
             organization.phone_number = (
                 data.phone_number.strip() if data.phone_number else None
             )
+        if "email" in data.model_fields_set:
+            organization.email = data.email.strip() if data.email else None
         if data.is_active is not None:
             organization.is_active = data.is_active
 
