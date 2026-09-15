@@ -22,6 +22,9 @@ class Settings(BaseSettings):
     app_url: str = "http://localhost:3000"
     upload_dir: str = "uploads"
 
+    # Redis
+    redis_url: str = "redis://127.0.0.1:6379/0"
+
     # SMTP Email Settings (optional, configured via .env)
     smtp_host: str = "smtp.gmail.com"
     smtp_port: int = 587
