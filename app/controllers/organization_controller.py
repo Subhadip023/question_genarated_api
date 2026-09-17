@@ -1,9 +1,11 @@
 """Business logic for organizations."""
 
 import logging
+import math
 import secrets
 
 from fastapi import UploadFile
+from sqlalchemy import func, or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -17,7 +19,7 @@ from app.schemas.organization import (
     OrganizationResponse,
     OrganizationUpdate,
 )
-from app.schemas.user import UserCreate, UserResponse
+from app.schemas.user import UserCreate, UserResponse, PaginatedUserResponse
 from app.services.auth_service import hash_password
 from app.services.file_service import FileService
 from app.services.mail_service import MailService, MailServiceError
@@ -249,6 +251,74 @@ class OrganizationController:
             .all()
         )
         return [UserResponse.model_validate(u) for u in users]
+
+    @staticmethod
+    def get_students(
+        organization_id: int,
+        actor_user_id: int,
+        actor_role: int,
+        db: Session,
+        page: int = 1,
+        limit: int = 5,
+        sort_order: str = "desc",
+        q: str | None = None,
+    ) -> PaginatedUserResponse:
+        organization = db.query(Organization.id).filter(
+            Organization.id == organization_id
+        ).first()
+        if organization is None:
+            raise OrganizationNotFoundError
+
+        if actor_role != 0:
+            is_member = (
+                db.query(OrganizationUser)
+                .filter(
+                    OrganizationUser.org_id == organization_id,
+                    OrganizationUser.user_id == actor_user_id,
+                )
+                .first()
+                is not None
+            )
+            if not is_member:
+                raise OrganizationUserPermissionError
+
+        query = (
+            db.query(User)
+            .join(OrganizationUser, OrganizationUser.user_id == User.id)
+            .filter(
+                OrganizationUser.org_id == organization_id,
+                User.role == 3,
+            )
+        )
+
+        if q and q.strip():
+            search_str = f"%{q.strip().lower()}%"
+            query = query.filter(
+                or_(
+                    func.lower(User.name).like(search_str),
+                    func.lower(User.email).like(search_str),
+                )
+            )
+
+        if sort_order == "desc":
+            query = query.order_by(User.id.desc())
+        else:
+            query = query.order_by(User.id.asc())
+
+        total = query.count()
+        page = max(1, page)
+        limit = max(1, min(limit, 100))
+        offset = (page - 1) * limit
+        items = query.offset(offset).limit(limit).all()
+        total_pages = max(1, math.ceil(total / limit)) if total > 0 else 1
+
+        return PaginatedUserResponse(
+            items=[UserResponse.model_validate(u) for u in items],
+            total=total,
+            page=page,
+            page_size=limit,
+            total_pages=total_pages,
+        )
 
     @staticmethod
     def update_organization(

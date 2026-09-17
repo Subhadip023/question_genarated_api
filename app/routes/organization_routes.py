@@ -17,7 +17,7 @@ from app.schemas.organization import (
     OrganizationResponse,
     OrganizationUpdate,
 )
-from app.schemas.user import UserCreate, UserResponse
+from app.schemas.user import UserCreate, UserResponse, PaginatedUserResponse
 
 router = APIRouter(prefix="/organizations", tags=["Organizations"])
 
@@ -107,6 +107,40 @@ def list_organization_users(
         raise HTTPException(
             status_code=403,
             detail="Only organization members or a superadmin can view users",
+        ) from None
+
+
+@router.get(
+    "/{organization_id}/students",
+    response_model=PaginatedUserResponse,
+    summary="Get paginated students in an organization (member or superadmin only)",
+)
+def list_organization_students(
+    organization_id: int,
+    request: Request,
+    page: int = 1,
+    limit: int = 5,
+    sort_order: str = "desc",
+    q: str | None = None,
+    db: Session = Depends(get_db),
+) -> PaginatedUserResponse:
+    try:
+        return OrganizationController.get_students(
+            organization_id=organization_id,
+            actor_user_id=request.state.user_id,
+            actor_role=request.state.user_role,
+            db=db,
+            page=page,
+            limit=limit,
+            sort_order=sort_order,
+            q=q,
+        )
+    except OrganizationNotFoundError:
+        raise HTTPException(status_code=404, detail="Organization not found") from None
+    except OrganizationUserPermissionError:
+        raise HTTPException(
+            status_code=403,
+            detail="Only organization members or a superadmin can view students",
         ) from None
 
 

@@ -16,6 +16,7 @@ from app.schemas.test_series import (
     TestSeriesResultsResponse,
     TestSeriesUpdate,
 )
+from app.schemas.user import PaginatedUserResponse
 
 router = APIRouter(prefix="/test-series", tags=["Test Series"])
 
@@ -153,4 +154,33 @@ def get_test_series_questions(
         raise HTTPException(
             status_code=403,
             detail=str(exc)
+        ) from None
+
+
+@router.get("/{series_id}/students", response_model=PaginatedUserResponse)
+def get_test_series_students(
+    series_id: int,
+    request: Request,
+    page: int = 1,
+    limit: int = 5,
+    sort_order: str = "desc",
+    q: str | None = None,
+    db: Session = Depends(get_db),
+) -> PaginatedUserResponse:
+    try:
+        return TestSeriesController.get_eligible_students(
+            series_id=series_id,
+            user_id=request.state.user_id,
+            user_role=request.state.user_role,
+            db=db,
+            page=page,
+            limit=limit,
+            sort_order=sort_order,
+            q=q,
+        )
+    except TestSeriesPermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from None
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500, detail=f"Error fetching test series students: {str(exc)}"
         ) from None

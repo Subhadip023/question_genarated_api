@@ -42,6 +42,16 @@ class UserResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class PaginatedUserResponse(BaseModel):
+    """One page of users with pagination metadata."""
+
+    items: list[UserResponse]
+    total: int
+    page: int
+    page_size: int
+    total_pages: int
+
+
 class LoginRequest(BaseModel):
     """Credentials used to obtain an access token."""
 
