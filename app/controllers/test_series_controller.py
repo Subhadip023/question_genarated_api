@@ -191,47 +191,32 @@ class TestSeriesController:
             # Generate series.id before creating test_access
             db.flush()
 
-            # Test access (optional batch_ids / batch_id link)
+            # Test access: Batch access (batch_id is set, student_id is None)
             target_batch_ids = list(data.batch_ids or [])
             if data.batch_id is not None and data.batch_id not in target_batch_ids:
                 target_batch_ids.append(data.batch_id)
-
-            target_batch_id = target_batch_ids[0] if target_batch_ids else None
-
-            created_auto_batch = False
-            if target_batch_id is None and data.student_ids:
-                new_batch = Batch(
-                    org_id=org_id,
-                    name=f"{series.name} Batch",
-                    supervisor=user_id,
-                    is_active=True,
-                    created_at=datetime.utcnow(),
-                    updated_at=datetime.utcnow(),
-                )
-                db.add(new_batch)
-                db.flush()
-                target_batch_id = new_batch.id
-                target_batch_ids.append(target_batch_id)
-                series.batch_id = target_batch_id
-                created_auto_batch = True
 
             for b_id in set(target_batch_ids):
                 if b_id and b_id > 0:
                     test_access = TestAccess(
                         test_series_id=series.id,
                         batch_id=b_id,
+                        student_id=None,
                         granted_by=user_id,
                     )
                     db.add(test_access)
 
-            if created_auto_batch and data.student_ids:
+            # Test access: Direct Student access (student_id is set, batch_id is None)
+            if data.student_ids:
                 for sid in set(data.student_ids):
-                    db.add(BatchStudent(
-                        batch_id=target_batch_id,
-                        student_id=sid,
-                        created_at=datetime.utcnow(),
-                        updated_at=datetime.utcnow(),
-                    ))
+                    if sid and sid > 0:
+                        test_access = TestAccess(
+                            test_series_id=series.id,
+                            batch_id=None,
+                            student_id=sid,
+                            granted_by=user_id,
+                        )
+                        db.add(test_access)
 
             db.commit()
 
@@ -352,13 +337,18 @@ class TestSeriesController:
                 setattr(series, field, value)
 
         # Handle batch_ids / batch_id / student_ids updates
-        series_batch_name = f"{series.name} Batch"
-        series_batch = (
+        # Clean up any legacy synthetic batch if it existed
+        legacy_series_batch = (
             db.query(Batch)
-            .filter(Batch.name == series_batch_name, Batch.org_id == series.org_id)
+            .filter(Batch.name == f"{series.name} Batch", Batch.org_id == series.org_id)
             .first()
         )
+        if legacy_series_batch:
+            db.query(BatchStudent).filter(BatchStudent.batch_id == legacy_series_batch.id).delete(synchronize_session=False)
+            db.query(TestAccess).filter(TestAccess.batch_id == legacy_series_batch.id).delete(synchronize_session=False)
+            db.delete(legacy_series_batch)
 
+        # Handle batch access updates (batch_id has value, student_id is None)
         has_batch_update = "batch_ids" in updates or "batch_id" in updates
         if has_batch_update:
             new_batch_ids = []
@@ -373,80 +363,39 @@ class TestSeriesController:
 
             new_batch_ids = list(set(new_batch_ids))
 
-            # Delete old organization batch access (do not delete series_batch access here)
-            if series_batch:
-                db.query(TestAccess).filter(
-                    TestAccess.test_series_id == series_id,
-                    TestAccess.batch_id != series_batch.id,
-                ).delete()
-            else:
-                db.query(TestAccess).filter(TestAccess.test_series_id == series_id).delete()
+            # Delete old batch access records (where batch_id is NOT NULL)
+            db.query(TestAccess).filter(
+                TestAccess.test_series_id == series_id,
+                TestAccess.batch_id.isnot(None),
+            ).delete(synchronize_session=False)
 
             for b_id in new_batch_ids:
-                existing = db.query(TestAccess).filter(
-                    TestAccess.test_series_id == series_id,
-                    TestAccess.batch_id == b_id,
-                ).first()
-                if not existing:
-                    db.add(TestAccess(test_series_id=series_id, batch_id=b_id, granted_by=user_id))
+                db.add(TestAccess(
+                    test_series_id=series_id,
+                    batch_id=b_id,
+                    student_id=None,
+                    granted_by=user_id,
+                ))
 
-            series.batch_id = new_batch_ids[0] if new_batch_ids else (series_batch.id if series_batch else None)
+            series.batch_id = new_batch_ids[0] if new_batch_ids else None
 
-        # Handle individual student_ids update (independent of organization batches!)
+        # Handle individual student_ids update (student_id has value, batch_id is None)
         if student_ids is not None:
-            target_student_ids = set([s for s in student_ids if s and s > 0])
-            if target_student_ids:
-                if not series_batch:
-                    series_batch = Batch(
-                        org_id=series.org_id,
-                        name=series_batch_name,
-                        supervisor=user_id,
-                        is_active=True,
-                        created_at=datetime.utcnow(),
-                        updated_at=datetime.utcnow(),
-                    )
-                    db.add(series_batch)
-                    db.flush()
+            target_student_ids = list(set([s for s in student_ids if s and s > 0]))
 
-                # Sync students in series_batch ONLY (never touch organization batches!)
-                existing_bs = db.query(BatchStudent).filter(BatchStudent.batch_id == series_batch.id).all()
-                existing_ids = {bs.student_id for bs in existing_bs}
+            # Delete old student access records (where student_id is NOT NULL)
+            db.query(TestAccess).filter(
+                TestAccess.test_series_id == series_id,
+                TestAccess.student_id.isnot(None),
+            ).delete(synchronize_session=False)
 
-                to_remove = existing_ids - target_student_ids
-                if to_remove:
-                    db.query(BatchStudent).filter(
-                        BatchStudent.batch_id == series_batch.id,
-                        BatchStudent.student_id.in_(to_remove)
-                    ).delete(synchronize_session=False)
-
-                to_add = target_student_ids - existing_ids
-                for sid in to_add:
-                    db.add(BatchStudent(
-                        batch_id=series_batch.id,
-                        student_id=sid,
-                        created_at=datetime.utcnow(),
-                        updated_at=datetime.utcnow(),
-                    ))
-
-                # Ensure series_batch has an entry in TestAccess
-                has_access = db.query(TestAccess).filter(
-                    TestAccess.test_series_id == series_id,
-                    TestAccess.batch_id == series_batch.id,
-                ).first()
-                if not has_access:
-                    db.add(TestAccess(test_series_id=series_id, batch_id=series_batch.id, granted_by=user_id))
-
-                if not getattr(series, "batch_id", None):
-                    series.batch_id = series_batch.id
-
-            else:
-                # User cleared individual students: clear students in series_batch and remove series_batch from TestAccess
-                if series_batch:
-                    db.query(BatchStudent).filter(BatchStudent.batch_id == series_batch.id).delete(synchronize_session=False)
-                    db.query(TestAccess).filter(
-                        TestAccess.test_series_id == series_id,
-                        TestAccess.batch_id == series_batch.id,
-                    ).delete(synchronize_session=False)
+            for sid in target_student_ids:
+                db.add(TestAccess(
+                    test_series_id=series_id,
+                    batch_id=None,
+                    student_id=sid,
+                    granted_by=user_id,
+                ))
 
         # Handle invite token hash when access type changes or regeneration requested
         invite_token = None
@@ -524,12 +473,16 @@ class TestSeriesController:
             attempt_counts = dict(counts)
 
             access_records = (
-                db.query(TestAccess.test_series_id, TestAccess.batch_id)
+                db.query(TestAccess.test_series_id, TestAccess.batch_id, TestAccess.student_id)
                 .filter(TestAccess.test_series_id.in_(series_ids))
                 .all()
             )
-            for s_id, b_id in access_records:
-                batch_ids_map[s_id].append(b_id)
+            student_ids_map = defaultdict(list)
+            for s_id, b_id, st_id in access_records:
+                if b_id is not None:
+                    batch_ids_map[s_id].append(b_id)
+                if st_id is not None:
+                    student_ids_map[s_id].append(st_id)
 
         return [
             TestSeriesController._serialize(
@@ -537,6 +490,7 @@ class TestSeriesController:
                 db=db,
                 attempt_count=attempt_counts.get(item.id, 0),
                 batch_ids=batch_ids_map.get(item.id, []),
+                student_ids=student_ids_map.get(item.id, []),
             )
             for item in items
         ]
@@ -775,30 +729,27 @@ class TestSeriesController:
         db: Session | None = None,
         attempt_count: int = 0,
         batch_ids: list[int] | None = None,
+        student_ids: list[int] | None = None,
     ) -> TestSeriesResponse:
-        series_batch_name = f"{item.name} Batch"
-        all_access = (
-            db.query(TestAccess.batch_id, Batch.name)
-            .join(Batch, Batch.id == TestAccess.batch_id)
-            .filter(TestAccess.test_series_id == item.id)
-            .all()
-        ) if db is not None else []
+        if batch_ids is None and db is not None:
+            batch_ids = [
+                row[0] for row in db.query(TestAccess.batch_id)
+                .filter(TestAccess.test_series_id == item.id, TestAccess.batch_id.isnot(None))
+                .all()
+            ]
+        elif batch_ids is None:
+            batch_ids = []
 
-        org_batch_ids = [a[0] for a in all_access if a[1] != series_batch_name]
-        series_batch_ids = [a[0] for a in all_access if a[1] == series_batch_name]
+        if student_ids is None and db is not None:
+            student_ids = [
+                row[0] for row in db.query(TestAccess.student_id)
+                .filter(TestAccess.test_series_id == item.id, TestAccess.student_id.isnot(None))
+                .all()
+            ]
+        elif student_ids is None:
+            student_ids = []
 
-        if batch_ids is None:
-            batch_ids = org_batch_ids
-
-        batch_id = batch_ids[0] if batch_ids else (series_batch_ids[0] if series_batch_ids else getattr(item, "batch_id", None))
-
-        student_ids = []
-        if series_batch_ids and db is not None:
-            bs_entries = db.query(BatchStudent.student_id).filter(BatchStudent.batch_id.in_(series_batch_ids)).all()
-            student_ids = [bs[0] for bs in bs_entries]
-        elif not batch_ids and batch_id and db is not None:
-            bs_entries = db.query(BatchStudent.student_id).filter(BatchStudent.batch_id == batch_id).all()
-            student_ids = [bs[0] for bs in bs_entries]
+        batch_id = batch_ids[0] if batch_ids else getattr(item, "batch_id", None)
 
         invite_tok = getattr(item, "invite_token", None)
         if item.access_type == "invite_only":
@@ -986,7 +937,10 @@ class TestSeriesController:
         # Exclude students who are in the selected/assigned batches
         if exclude_batch_ids is None:
             assigned_batch_ids = [
-                row[0] for row in db.query(TestAccess.batch_id).filter(TestAccess.test_series_id == series_id).all()
+                row[0] for row in db.query(TestAccess.batch_id).filter(
+                    TestAccess.test_series_id == series_id,
+                    TestAccess.batch_id.isnot(None),
+                ).all()
             ]
             if getattr(series, "batch_id", None) and series.batch_id not in assigned_batch_ids:
                 assigned_batch_ids.append(series.batch_id)

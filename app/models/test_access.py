@@ -21,9 +21,15 @@ class TestAccess(Base):
         index=True
     )
 
-    batch_id: Mapped[int] = mapped_column(
+    batch_id: Mapped[int | None] = mapped_column(
         ForeignKey("batches.id", ondelete="CASCADE"),
-        nullable=False,
+        nullable=True,
+        index=True
+    )
+
+    student_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=True,
         index=True
     )
 
@@ -44,5 +50,10 @@ class TestAccess(Base):
             "test_series_id",
             "batch_id",
             name="uq_test_access_series_batch"
+        ),
+        UniqueConstraint(
+            "test_series_id",
+            "student_id",
+            name="uq_test_access_series_student"
         ),
     )

@@ -77,7 +77,12 @@ class StudentTestController:
         )
         student_private_series_ids = (
             db.query(TestAccess.test_series_id)
-            .filter(TestAccess.batch_id.in_(student_batch_ids))
+            .filter(
+                or_(
+                    TestAccess.batch_id.in_(student_batch_ids),
+                    TestAccess.student_id == user_id,
+                )
+            )
             .subquery()
         )
 
@@ -266,6 +271,29 @@ class StudentTestController:
             raise StudentTestValidationError("Test series not found or access code is invalid")
         if not series.is_active or StudentTestController._as_utc(series.valid_until) <= now:
             raise StudentTestPermissionError("Test series is inactive or expired")
+
+        # ── Access check for private series ───────────────────────────────────
+        if series.access_type == "private":
+            student_batches = (
+                db.query(BatchStudent.batch_id)
+                .filter(BatchStudent.student_id == user_id)
+                .all()
+            )
+            b_ids = [b[0] for b in student_batches]
+            access_conditions = [TestAccess.student_id == user_id]
+            if b_ids:
+                access_conditions.append(TestAccess.batch_id.in_(b_ids))
+
+            has_access = (
+                db.query(TestAccess.id)
+                .filter(
+                    TestAccess.test_series_id == series.id,
+                    or_(*access_conditions),
+                )
+                .first()
+            )
+            if not has_access:
+                raise StudentTestPermissionError("You do not have permission to access this private test series")
 
         # ── Check for an existing attempt for this series ──────────────────────
         existing = (
