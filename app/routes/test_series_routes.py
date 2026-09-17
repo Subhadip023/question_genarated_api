@@ -165,9 +165,18 @@ def get_test_series_students(
     limit: int = 5,
     sort_order: str = "desc",
     q: str | None = None,
+    exclude_batch_ids: str | None = None,
     db: Session = Depends(get_db),
 ) -> PaginatedUserResponse:
     try:
+        parsed_exclude_batch_ids = None
+        if exclude_batch_ids is not None:
+            parsed_exclude_batch_ids = []
+            for part in exclude_batch_ids.split(","):
+                part = part.strip()
+                if part.isdigit() and int(part) > 0:
+                    parsed_exclude_batch_ids.append(int(part))
+
         return TestSeriesController.get_eligible_students(
             series_id=series_id,
             user_id=request.state.user_id,
@@ -177,6 +186,7 @@ def get_test_series_students(
             limit=limit,
             sort_order=sort_order,
             q=q,
+            exclude_batch_ids=parsed_exclude_batch_ids,
         )
     except TestSeriesPermissionError as exc:
         raise HTTPException(status_code=403, detail=str(exc)) from None

@@ -926,6 +926,7 @@ class TestSeriesController:
         limit: int = 5,
         sort_order: str = "desc",
         q: str | None = None,
+        exclude_batch_ids: list[int] | None = None,
     ) -> PaginatedUserResponse:
         series_query = db.query(TestSeries).filter(TestSeries.id == series_id)
         series_query = TestSeriesController._apply_visibility(series_query, user_id, user_role, db)
@@ -944,6 +945,23 @@ class TestSeriesController:
             )
         else:
             query = db.query(User).filter(User.role == 3)
+
+        # Exclude students who are in the selected/assigned batches
+        if exclude_batch_ids is None:
+            assigned_batch_ids = [
+                row[0] for row in db.query(TestAccess.batch_id).filter(TestAccess.test_series_id == series_id).all()
+            ]
+            if getattr(series, "batch_id", None) and series.batch_id not in assigned_batch_ids:
+                assigned_batch_ids.append(series.batch_id)
+            exclude_batch_ids = assigned_batch_ids
+
+        if exclude_batch_ids:
+            batch_student_subquery = (
+                db.query(BatchStudent.student_id)
+                .filter(BatchStudent.batch_id.in_(exclude_batch_ids))
+                .subquery()
+            )
+            query = query.filter(~User.id.in_(batch_student_subquery))
 
         if q and q.strip():
             search_str = f"%{q.strip().lower()}%"
