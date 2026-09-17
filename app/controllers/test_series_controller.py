@@ -759,9 +759,38 @@ class TestSeriesController:
         batch_id = batch_ids[0] if batch_ids else getattr(item, "batch_id", None)
 
         student_ids = []
-        if db is not None and batch_id:
-            bs_entries = db.query(BatchStudent.student_id).filter(BatchStudent.batch_id == batch_id).all()
-            student_ids = [bs[0] for bs in bs_entries]
+        if db is not None:
+            assigned_batches = list(batch_ids) if batch_ids else []
+            if getattr(item, "batch_id", None) and item.batch_id not in assigned_batches:
+                assigned_batches.append(item.batch_id)
+
+            batch_student_ids = set()
+            if assigned_batches:
+                all_bs = (
+                    db.query(BatchStudent.student_id)
+                    .filter(BatchStudent.batch_id.in_(assigned_batches))
+                    .all()
+                )
+                batch_student_ids = {bs[0] for bs in all_bs}
+
+            series_batch = (
+                db.query(Batch)
+                .filter(
+                    Batch.name == f"{item.name} Batch",
+                    Batch.org_id == item.org_id,
+                )
+                .first()
+            )
+            if series_batch:
+                raw_bs = (
+                    db.query(BatchStudent.student_id)
+                    .filter(BatchStudent.batch_id == series_batch.id)
+                    .all()
+                )
+                student_ids = [bs[0] for bs in raw_bs if bs[0] not in batch_student_ids]
+            elif batch_id and not batch_ids:
+                bs_entries = db.query(BatchStudent.student_id).filter(BatchStudent.batch_id == batch_id).all()
+                student_ids = [bs[0] for bs in bs_entries]
 
         invite_tok = getattr(item, "invite_token", None)
         if item.access_type == "invite_only":
