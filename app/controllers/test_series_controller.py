@@ -196,6 +196,7 @@ class TestSeriesController:
 
             target_batch_id = target_batch_ids[0] if target_batch_ids else None
 
+            created_auto_batch = False
             if target_batch_id is None and data.student_ids:
                 new_batch = Batch(
                     org_id=org_id,
@@ -210,6 +211,7 @@ class TestSeriesController:
                 target_batch_id = new_batch.id
                 target_batch_ids.append(target_batch_id)
                 series.batch_id = target_batch_id
+                created_auto_batch = True
 
             for b_id in set(target_batch_ids):
                 if b_id and b_id > 0:
@@ -220,7 +222,7 @@ class TestSeriesController:
                     )
                     db.add(test_access)
 
-            if target_batch_id and data.student_ids:
+            if created_auto_batch and data.student_ids:
                 for sid in set(data.student_ids):
                     db.add(BatchStudent(
                         batch_id=target_batch_id,
@@ -375,7 +377,9 @@ class TestSeriesController:
                 if access:
                     target_batch_id = access[0]
 
-        if student_ids is not None:
+        # Only sync individual students if student_ids is explicitly provided and non-empty,
+        # and NEVER when existing organization batches are assigned via batch_ids / batch_id.
+        if student_ids and not (has_batch_update and new_batch_ids):
             if not target_batch_id:
                 new_batch = Batch(
                     org_id=series.org_id,
