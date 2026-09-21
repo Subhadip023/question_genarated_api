@@ -6,6 +6,12 @@ from typing import Literal
 from pydantic import BaseModel, Field, field_validator
 
 
+class SeriesQuestionInput(BaseModel):
+    question_id: int
+    marks: float | None = Field(default=None, ge=0)
+    negative_marks: float | None = Field(default=None, ge=0)
+
+
 class TestSeriesCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=255)
 
@@ -23,7 +29,8 @@ class TestSeriesCreate(BaseModel):
 
     valid_until: datetime
     duration_seconds: int = Field(..., gt=0)
-    question_ids: list[int] = Field(default_factory=list)
+
+    questions: list[SeriesQuestionInput] = Field(default_factory=list)
 
     is_active: bool = True
     is_result_show: bool = False
@@ -43,14 +50,18 @@ class TestSeriesCreate(BaseModel):
 
         return value
 
-    @field_validator("question_ids")
+    @field_validator("questions")
     @classmethod
-    def question_ids_must_be_unique(
+    def questions_must_be_unique(
         cls,
-        value: list[int]
-    ) -> list[int]:
-        if len(value) != len(set(value)):
-            raise ValueError("question_ids must not contain duplicates")
+        value: list[SeriesQuestionInput]
+    ) -> list[SeriesQuestionInput]:
+        question_ids = [question.question_id for question in value]
+
+        if len(question_ids) != len(set(question_ids)):
+            raise ValueError(
+                "questions must not contain duplicate question_id"
+            )
 
         return value
 
@@ -69,52 +80,80 @@ class TestSeriesResponse(BaseModel):
     batch_id: int | None = None
     batch_ids: list[int] = Field(default_factory=list)
     student_ids: list[int] = Field(default_factory=list)
+
     valid_until: datetime
     duration_seconds: int
+
     is_active: bool
     is_result_show: bool
     is_score_show: bool
-    question_ids: list[int]
+
+    questions: list[SeriesQuestionInput] = Field(default_factory=list)
+
     created_at: datetime
     updated_at: datetime
     attempt_count: int = 0
 
 
-
 class TestSeriesUpdate(BaseModel):
     name: str | None = Field(None, min_length=1, max_length=255)
-    access_type: Literal["invite_only", "public", "private"] | None = None
+
+    access_type: Literal[
+        "invite_only",
+        "public",
+        "private"
+    ] | None = None
+
     teacher_group_id: int | None = None
     supervisor_id: int | None = None
     batch_id: int | None = None
     batch_ids: list[int] | None = None
     student_ids: list[int] | None = None
+
     valid_until: datetime | None = None
     duration_seconds: int | None = Field(None, gt=0)
-    question_ids: list[int] | None = Field(None)
+
+    questions: list[SeriesQuestionInput] | None = None
+
     is_active: bool | None = None
     is_result_show: bool | None = None
     is_score_show: bool | None = None
+
     regenerate_invite_token: bool | None = None
 
     @field_validator("valid_until")
     @classmethod
-    def validity_must_be_future_and_timezone_aware(cls, value: datetime | None) -> datetime | None:
+    def validity_must_be_future_and_timezone_aware(
+        cls,
+        value: datetime | None
+    ) -> datetime | None:
         if value is None:
             return value
+
         if value.tzinfo is None or value.utcoffset() is None:
             raise ValueError("valid_until must include a timezone")
+
         if value <= datetime.now(timezone.utc):
             raise ValueError("valid_until must be in the future")
+
         return value
 
-    @field_validator("question_ids")
+    @field_validator("questions")
     @classmethod
-    def question_ids_must_be_unique(cls, value: list[int] | None) -> list[int] | None:
+    def questions_must_be_unique(
+        cls,
+        value: list[SeriesQuestionInput] | None
+    ) -> list[SeriesQuestionInput] | None:
         if value is None:
             return value
-        if len(value) != len(set(value)):
-            raise ValueError("question_ids must not contain duplicates")
+
+        question_ids = [question.question_id for question in value]
+
+        if len(question_ids) != len(set(question_ids)):
+            raise ValueError(
+                "questions must not contain duplicate question_id"
+            )
+
         return value
 
 
@@ -143,6 +182,3 @@ class TestSeriesResultsResponse(BaseModel):
     completed_attempts: int
     average_score: float | None = None
     results: list[TestSeriesResultItem]
-
-
-
