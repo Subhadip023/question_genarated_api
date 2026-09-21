@@ -80,9 +80,11 @@ class TestSeriesController:
                 "Only roles 0, 1, and 2 can create test series"
             )
 
+        question_ids = [q.question_id for q in data.questions]
+
         # Validate questions
         question_query = db.query(Question).filter(
-            Question.id.in_(data.question_ids),
+            Question.id.in_(question_ids),
             Question.is_active.is_(True)
         )
 
@@ -93,14 +95,11 @@ class TestSeriesController:
             db
         )
 
-        allowed_ids = {
-            question.id
-            for question in question_query.all()
-        }
+        allowed_ids = {question.id for question in question_query.all()}
 
-        if allowed_ids != set(data.question_ids):
+        if allowed_ids != set(question_ids):
             raise TestSeriesQuestionError(
-                "One or more questions do not exist, are inactive, or are not accessible"
+                "One or more questions are invalid or not accessible"
             )
 
         # Generate invite token only for invite_only tests
@@ -175,13 +174,12 @@ class TestSeriesController:
 
             series_questions=[
                 SeriesQuestion(
-                    question_id=question_id,
-                    position=position
+                    question_id=q.question_id,
+                    marks=q.marks,
+                    negative_marks=q.negative_marks,
+                    position=position,
                 )
-                for position, question_id in enumerate(
-                    data.question_ids,
-                    start=1
-                )
+                for position, q in enumerate(data.questions, start=1)
             ],
         )
 
@@ -282,28 +280,45 @@ class TestSeriesController:
         if "is_result_show" in updates or "is_score_show" in updates:
             if not (is_admin or is_supervisor):
                 raise TestSeriesPermissionError("Only supervisor and admin can publish or change test results visibility")
-        question_ids = updates.pop("question_ids", None)
+        questions = updates.pop("questions", None)
 
-        if question_ids is not None:
+        if questions is not None:
+            question_ids = [q["question_id"] for q in questions]
+
             question_query = db.query(Question).filter(
-                Question.id.in_(question_ids), Question.is_active.is_(True)
+                Question.id.in_(question_ids),
+                Question.is_active.is_(True)
             )
+
             question_query = QuestionController._apply_visibility_filter(
-                question_query, user_id, user_role, db
+                question_query,
+                user_id,
+                user_role,
+                db
             )
+
             allowed_ids = {question.id for question in question_query.all()}
+
             if allowed_ids != set(question_ids):
                 raise TestSeriesQuestionError(
-                    "One or more questions do not exist, are inactive, or are not accessible"
+                    "One or more questions do not exist, are inactive, "
+                    "or are not accessible"
                 )
 
-            # Delete existing questions association
-            db.query(SeriesQuestion).filter(SeriesQuestion.series_id == series_id).delete()
-            
-            # Create new association
+            # Delete existing question associations
+            db.query(SeriesQuestion).filter(
+                SeriesQuestion.series_id == series_id
+            ).delete(synchronize_session=False)
+
+            # Create new associations with test-specific marks
             series.series_questions = [
-                SeriesQuestion(question_id=qid, position=pos)
-                for pos, qid in enumerate(question_ids, start=1)
+                SeriesQuestion(
+                    question_id=q["question_id"],
+                    marks=q.get("marks"),
+                    negative_marks=q.get("negative_marks"),
+                    position=position,
+                )
+                for position, q in enumerate(questions, start=1)
             ]
 
         # Validate teacher_group_id if updated
@@ -782,7 +797,14 @@ class TestSeriesController:
             is_active=item.is_active,
             is_result_show=bool(item.is_result_show),
             is_score_show=bool(item.is_score_show),
-            question_ids=[entry.question_id for entry in item.series_questions],
+            questions=[
+                {
+                    "question_id": entry.question_id,
+                    "marks": entry.marks,
+                    "negative_marks": entry.negative_marks,
+                }
+                for entry in item.series_questions
+            ],
             created_at=item.created_at,
             updated_at=item.updated_at,
             attempt_count=attempt_count,
@@ -887,7 +909,16 @@ class TestSeriesController:
                 {
                     "question_id": item.question.id,
                     "question": item.question.question,
-                    "marks": float(item.question.marks),
+                    "marks": (
+                        float(item.marks)
+                        if item.marks is not None
+                        else None
+                    ),
+                    "negative_marks": (
+                        float(item.negative_marks)
+                        if item.negative_marks is not None
+                        else None
+                    ),
                     "diagrams": q_diagrams_map.get(item.question.id, []),
                     "diagram_path": q_diagrams_map[item.question.id][-1]["path"] if q_diagrams_map.get(item.question.id) else None,
                     "options": [
