@@ -144,6 +144,13 @@ class TestSeriesController:
         # Create test series
         series_code = TestSeriesController._generate_unique_code(db)
 
+        # Base marks map fallback
+        question_ids = [q.question_id for q in data.questions]
+        base_marks_map = {}
+        if question_ids:
+            base_qs = db.query(Question.id, Question.marks).filter(Question.id.in_(question_ids)).all()
+            base_marks_map = {q.id: float(q.marks) for q in base_qs}
+
         series = TestSeries(
             code=series_code,
             invite_token=invite_token,
@@ -175,8 +182,8 @@ class TestSeriesController:
             series_questions=[
                 SeriesQuestion(
                     question_id=q.question_id,
-                    marks=q.marks,
-                    negative_marks=q.negative_marks,
+                    marks=q.marks if q.marks is not None else base_marks_map.get(q.question_id, 1.0),
+                    negative_marks=q.negative_marks if q.negative_marks is not None else 0.0,
                     position=position,
                 )
                 for position, q in enumerate(data.questions, start=1)
@@ -310,12 +317,19 @@ class TestSeriesController:
                 SeriesQuestion.series_id == series_id
             ).delete(synchronize_session=False)
 
+            # Base marks map fallback
+            q_ids = [q["question_id"] for q in questions]
+            base_marks_map = {}
+            if q_ids:
+                base_qs = db.query(Question.id, Question.marks).filter(Question.id.in_(q_ids)).all()
+                base_marks_map = {q.id: float(q.marks) for q in base_qs}
+
             # Create new associations with test-specific marks
             series.series_questions = [
                 SeriesQuestion(
                     question_id=q["question_id"],
-                    marks=q.get("marks"),
-                    negative_marks=q.get("negative_marks"),
+                    marks=q.get("marks") if q.get("marks") is not None else base_marks_map.get(q["question_id"], 1.0),
+                    negative_marks=q.get("negative_marks") if q.get("negative_marks") is not None else 0.0,
                     position=position,
                 )
                 for position, q in enumerate(questions, start=1)

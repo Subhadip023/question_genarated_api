@@ -345,17 +345,18 @@ class StudentTestController:
                 if d.ref_id not in start_opt_diag_map:
                     start_opt_diag_map[d.ref_id] = d.path
 
-        for position, question_id in enumerate(question_ids, start=1):
-            question = questions.get(question_id)
+        for position, sq_entry in enumerate(series.series_questions, start=1):
+            question = questions.get(sq_entry.question_id)
             if question is None:
                 raise StudentTestValidationError("A test question no longer exists")
-            total_marks += question.marks
+            effective_marks = Decimal(str(sq_entry.marks)) if sq_entry.marks is not None else question.marks
+            total_marks += effective_marks
             snapshots.append(
                 AttemptQuestion(
                     original_question_id=question.id,
                     position=position,
                     question_text=question.question,
-                    marks=question.marks,
+                    marks=effective_marks,
                     options_snapshot=json.dumps(
                         [
                             {
