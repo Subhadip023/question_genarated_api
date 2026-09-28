@@ -175,6 +175,11 @@ class StudentTestController:
                     }
                 )
             )
+            calc_total = sum(float(sq.marks if sq.marks is not None else (sq.question.marks if sq.question else 1.0)) for sq in item.series_questions)
+            neg_marks_list = [float(sq.negative_marks or 0.0) for sq in item.series_questions]
+            has_neg = any(m > 0 for m in neg_marks_list)
+            max_neg = max(neg_marks_list, default=0.0)
+
             results.append(
                 AvailableSeriesResponse(
                     id=item.id,
@@ -183,6 +188,9 @@ class StudentTestController:
                     valid_until=item.valid_until,
                     duration_seconds=item.duration_seconds,
                     question_count=len(item.series_questions),
+                    total_marks=calc_total,
+                    has_negative_marks=has_neg,
+                    max_negative_mark=max_neg,
                     topics=topic_names,
                     is_result_show=item.is_result_show,
                     is_score_show=item.is_score_show,
@@ -229,11 +237,19 @@ class StudentTestController:
         valid_until_utc = StudentTestController._as_utc(series.valid_until)
         is_expired = valid_until_utc <= now
 
+        calc_total = sum(float(sq.marks if sq.marks is not None else (sq.question.marks if sq.question else 1.0)) for sq in series.series_questions)
+        neg_marks_list = [float(sq.negative_marks or 0.0) for sq in series.series_questions]
+        has_neg = any(m > 0 for m in neg_marks_list)
+        max_neg = max(neg_marks_list, default=0.0)
+
         return InviteInfoResponse(
             id=series.id,
             name=series.name,
             duration_seconds=series.duration_seconds,
             question_count=len(series.series_questions),
+            total_marks=calc_total,
+            has_negative_marks=has_neg,
+            max_negative_mark=max_neg,
             valid_until=series.valid_until,
             is_active=bool(series.is_active),
             is_expired=is_expired,
@@ -816,6 +832,10 @@ class StudentTestController:
         has_pdf = bool(file_path and file_path.exists()) and (is_staff or is_result_show)
         result_file_key = f"uploads/results/series_{series.id}/result.pdf" if has_pdf else None
 
+        neg_marks_list = [float(val) for val in sq_neg_map.values()]
+        has_neg = any(m > 0 for m in neg_marks_list)
+        max_neg = max(neg_marks_list, default=0.0)
+
         return AttemptResponse(
             id=attempt.id,
             series_id=attempt.series_id,
@@ -826,6 +846,8 @@ class StudentTestController:
             status=attempt.status,
             score=attempt.score if (is_staff or is_score_show) else Decimal("0"),
             total_marks=attempt.total_marks,
+            has_negative_marks=has_neg,
+            max_negative_mark=max_neg,
             is_result_show=True if is_staff else is_result_show,
             is_score_show=True if is_staff else is_score_show,
             result_file_key=result_file_key,

@@ -13,6 +13,9 @@ class AvailableSeriesResponse(BaseModel):
     valid_until: datetime
     duration_seconds: int
     question_count: int
+    total_marks: float | None = None
+    has_negative_marks: bool = False
+    max_negative_mark: float = 0.0
     topics: list[str] = Field(default_factory=list)
     is_result_show: bool = False
     is_score_show: bool = False
@@ -25,6 +28,9 @@ class InviteInfoResponse(BaseModel):
     name: str
     duration_seconds: int
     question_count: int
+    total_marks: float | None = None
+    has_negative_marks: bool = False
+    max_negative_mark: float = 0.0
     valid_until: datetime
     is_active: bool
     is_expired: bool
@@ -86,6 +92,8 @@ class AttemptResponse(BaseModel):
     status: int
     score: Decimal
     total_marks: Decimal
+    has_negative_marks: bool = False
+    max_negative_mark: float = 0.0
     is_result_show: bool = False
     is_score_show: bool = False
     result_file_key: str | None = None
