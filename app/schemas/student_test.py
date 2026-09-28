@@ -67,6 +67,8 @@ class AttemptQuestionResponse(BaseModel):
     position: int
     question: str
     marks: Decimal
+    negative_marks: Decimal | float | None = None
+    marks_awarded: Decimal | float | None = None
     diagram_path: str | None = None
     diagrams: list[dict] = Field(default_factory=list)
     options: list[AttemptOptionResponse]

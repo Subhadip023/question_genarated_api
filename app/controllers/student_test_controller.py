@@ -478,14 +478,20 @@ class StudentTestController:
                     "This attempt has already been submitted or has expired."
                 )
             now = datetime.now(timezone.utc)
+            sq_neg_map = {
+                sq.question_id: Decimal(str(sq.negative_marks or 0))
+                for sq in db.query(SeriesQuestion).filter(SeriesQuestion.series_id == attempt.series_id).all()
+            }
             score = Decimal("0")
             for question in attempt.questions:
-                awarded = (
-                    question.marks
-                    if question.selected_option_id is not None
-                    and question.selected_option_id == question.correct_option_id
-                    else Decimal("0")
-                )
+                neg_val = sq_neg_map.get(question.original_question_id, Decimal("0"))
+                if question.selected_option_id is not None:
+                    if question.selected_option_id == question.correct_option_id:
+                        awarded = question.marks
+                    else:
+                        awarded = -abs(neg_val)
+                else:
+                    awarded = Decimal("0")
                 question.marks_awarded = awarded
                 score += awarded
             attempt.score = score
@@ -693,6 +699,36 @@ class StudentTestController:
 
         show_correct = is_done if is_staff else (is_done and is_result_show)
 
+        sq_neg_map = {
+            sq.question_id: Decimal(str(sq.negative_marks or 0))
+            for sq in series.series_questions
+        } if series and series.series_questions else {}
+
+        if is_done and series:
+            recalc_score = Decimal("0")
+            need_commit = False
+            for q in attempt.questions:
+                neg_val = sq_neg_map.get(q.original_question_id, Decimal("0"))
+                if q.selected_option_id is not None:
+                    if q.correct_option_id is not None and str(q.selected_option_id) == str(q.correct_option_id):
+                        expected_awarded = q.marks
+                    else:
+                        expected_awarded = -abs(neg_val)
+                else:
+                    expected_awarded = Decimal("0")
+
+                if q.marks_awarded != expected_awarded:
+                    q.marks_awarded = expected_awarded
+                    need_commit = True
+                recalc_score += expected_awarded
+
+            if attempt.score != recalc_score or need_commit:
+                attempt.score = recalc_score
+                try:
+                    db.commit()
+                except Exception:
+                    db.rollback()
+
         # Fetch diagram records for questions & options in this attempt
         original_q_ids = [q.original_question_id for q in attempt.questions]
         question_diagrams_map = {}
@@ -765,6 +801,8 @@ class StudentTestController:
                     position=q.position,
                     question=q.question_text,
                     marks=q.marks,
+                    negative_marks=sq_neg_map.get(q.original_question_id, Decimal("0")),
+                    marks_awarded=q.marks_awarded,
                     diagram_path=q_diagram_path,
                     diagrams=diagrams_list,
                     options=options_response,
