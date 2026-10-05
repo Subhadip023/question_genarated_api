@@ -10,7 +10,7 @@ from decimal import Decimal
 
 from app.config import settings
 
-from sqlalchemy import and_, or_
+from sqlalchemy import and_, func, or_
 from sqlalchemy.orm import Session, joinedload
 from app.models.user import User
 from app.constants.attempt_status import AttemptStatus
@@ -112,11 +112,6 @@ class StudentTestController:
 
         query = (
             db.query(TestSeries)
-            .options(
-                joinedload(TestSeries.series_questions)
-                .joinedload(SeriesQuestion.question)
-                .joinedload(Question.topic)
-            )
             .filter(
                 access_filter,
                 TestSeries.is_active.is_(True),
@@ -166,21 +161,57 @@ class StudentTestController:
         offset = max(0, (page - 1) * limit)
         items = query.offset(offset).limit(limit).all()
 
+        series_ids = [item.id for item in items]
+        question_stats = {}
+        topic_names_by_series = {}
+        if series_ids:
+            stats_rows = (
+                db.query(
+                    SeriesQuestion.series_id,
+                    func.count(SeriesQuestion.question_id),
+                    func.coalesce(
+                        func.sum(
+                            func.coalesce(
+                                SeriesQuestion.marks,
+                                Question.marks,
+                                1.0,
+                            )
+                        ),
+                        0.0,
+                    ),
+                    func.max(func.coalesce(SeriesQuestion.negative_marks, 0.0)),
+                )
+                .outerjoin(Question, Question.id == SeriesQuestion.question_id)
+                .filter(SeriesQuestion.series_id.in_(series_ids))
+                .group_by(SeriesQuestion.series_id)
+                .all()
+            )
+            question_stats = {
+                series_id: (question_count, total_marks, max_negative_mark)
+                for series_id, question_count, total_marks, max_negative_mark in stats_rows
+            }
+
+            topic_rows = (
+                db.query(SeriesQuestion.series_id, Topic.name)
+                .join(Question, Question.id == SeriesQuestion.question_id)
+                .join(Topic, Topic.id == Question.topic_id)
+                .filter(
+                    SeriesQuestion.series_id.in_(series_ids),
+                    Topic.name.isnot(None),
+                )
+                .distinct()
+                .all()
+            )
+            for series_id, topic_name in topic_rows:
+                topic_names_by_series.setdefault(series_id, set()).add(topic_name)
+
         results = []
         for item in items:
-            topic_names = sorted(
-                list(
-                    {
-                        sq.question.topic.name
-                        for sq in item.series_questions
-                        if sq.question and sq.question.topic and sq.question.topic.name
-                    }
-                )
+            question_count, calc_total, max_neg = question_stats.get(
+                item.id, (0, 0.0, 0.0)
             )
-            calc_total = sum(float(sq.marks if sq.marks is not None else (sq.question.marks if sq.question else 1.0)) for sq in item.series_questions)
-            neg_marks_list = [float(sq.negative_marks or 0.0) for sq in item.series_questions]
-            has_neg = any(m > 0 for m in neg_marks_list)
-            max_neg = max(neg_marks_list, default=0.0)
+            has_neg = max_neg > 0
+            topic_names = sorted(topic_names_by_series.get(item.id, set()))
 
             results.append(
                 AvailableSeriesResponse(
@@ -189,8 +220,8 @@ class StudentTestController:
                     org_id=item.org_id,
                     valid_until=item.valid_until,
                     duration_seconds=item.duration_seconds,
-                    question_count=len(item.series_questions),
-                    total_marks=calc_total,
+                    question_count=question_count,
+                    total_marks=float(calc_total),
                     has_negative_marks=has_neg,
                     max_negative_mark=max_neg,
                     topics=topic_names,
@@ -722,9 +753,10 @@ class StudentTestController:
             for sq in series.series_questions
         } if series and series.series_questions else {}
 
+        score = attempt.score
+        marks_awarded_by_question_id = {}
         if is_done and series:
-            recalc_score = Decimal("0")
-            need_commit = False
+            score = Decimal("0")
             for q in attempt.questions:
                 neg_val = sq_neg_map.get(q.original_question_id, Decimal("0"))
                 if q.selected_option_id is not None:
@@ -735,17 +767,8 @@ class StudentTestController:
                 else:
                     expected_awarded = Decimal("0")
 
-                if q.marks_awarded != expected_awarded:
-                    q.marks_awarded = expected_awarded
-                    need_commit = True
-                recalc_score += expected_awarded
-
-            if attempt.score != recalc_score or need_commit:
-                attempt.score = recalc_score
-                try:
-                    db.commit()
-                except Exception:
-                    db.rollback()
+                marks_awarded_by_question_id[q.id] = expected_awarded
+                score += expected_awarded
 
         # Fetch diagram records for questions & options in this attempt
         original_q_ids = [q.original_question_id for q in attempt.questions]
@@ -820,7 +843,9 @@ class StudentTestController:
                     question=q.question_text,
                     marks=q.marks,
                     negative_marks=sq_neg_map.get(q.original_question_id, Decimal("0")),
-                    marks_awarded=q.marks_awarded,
+                    marks_awarded=marks_awarded_by_question_id.get(
+                        q.id, q.marks_awarded
+                    ),
                     diagram_path=q_diagram_path,
                     diagrams=diagrams_list,
                     options=options_response,
@@ -846,7 +871,7 @@ class StudentTestController:
             expires_at=StudentTestController._as_utc(attempt.expires_at),
             submitted_at=StudentTestController._as_utc(attempt.submitted_at) if attempt.submitted_at else None,
             status=attempt.status,
-            score=attempt.score if (is_staff or is_score_show) else Decimal("0"),
+            score=score if (is_staff or is_score_show) else Decimal("0"),
             total_marks=attempt.total_marks,
             has_negative_marks=has_neg,
             max_negative_mark=max_neg,
