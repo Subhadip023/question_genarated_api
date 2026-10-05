@@ -125,6 +125,10 @@ class AnswerKeyController:
         if file_path.exists():
             file_path.unlink()
 
+        legacy_path = Path("uploads") / "results" / f"series_{series_id}" / "result.pdf"
+        if legacy_path.exists():
+            legacy_path.unlink()
+
         db.delete(answer_key)
         db.commit()
 
