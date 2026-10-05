@@ -23,6 +23,8 @@ from app.models.series_question import SeriesQuestion
 from app.models.test_access import TestAccess
 from app.models.topic import Topic
 from app.models.test_attempt import AttemptQuestion, TestAttempt
+from app.models.group_teacher import GroupTeacher
+from app.models.teacher_group import TeacherGroup
 from app.models.test_series import TestSeries
 from app.schemas.student_test import (
     AttemptHistoryResponse,
@@ -175,6 +177,11 @@ class StudentTestController:
                     }
                 )
             )
+            calc_total = sum(float(sq.marks if sq.marks is not None else (sq.question.marks if sq.question else 1.0)) for sq in item.series_questions)
+            neg_marks_list = [float(sq.negative_marks or 0.0) for sq in item.series_questions]
+            has_neg = any(m > 0 for m in neg_marks_list)
+            max_neg = max(neg_marks_list, default=0.0)
+
             results.append(
                 AvailableSeriesResponse(
                     id=item.id,
@@ -183,6 +190,9 @@ class StudentTestController:
                     valid_until=item.valid_until,
                     duration_seconds=item.duration_seconds,
                     question_count=len(item.series_questions),
+                    total_marks=calc_total,
+                    has_negative_marks=has_neg,
+                    max_negative_mark=max_neg,
                     topics=topic_names,
                     is_result_show=item.is_result_show,
                     is_score_show=item.is_score_show,
@@ -229,11 +239,19 @@ class StudentTestController:
         valid_until_utc = StudentTestController._as_utc(series.valid_until)
         is_expired = valid_until_utc <= now
 
+        calc_total = sum(float(sq.marks if sq.marks is not None else (sq.question.marks if sq.question else 1.0)) for sq in series.series_questions)
+        neg_marks_list = [float(sq.negative_marks or 0.0) for sq in series.series_questions]
+        has_neg = any(m > 0 for m in neg_marks_list)
+        max_neg = max(neg_marks_list, default=0.0)
+
         return InviteInfoResponse(
             id=series.id,
             name=series.name,
             duration_seconds=series.duration_seconds,
             question_count=len(series.series_questions),
+            total_marks=calc_total,
+            has_negative_marks=has_neg,
+            max_negative_mark=max_neg,
             valid_until=series.valid_until,
             is_active=bool(series.is_active),
             is_expired=is_expired,
@@ -345,17 +363,18 @@ class StudentTestController:
                 if d.ref_id not in start_opt_diag_map:
                     start_opt_diag_map[d.ref_id] = d.path
 
-        for position, question_id in enumerate(question_ids, start=1):
-            question = questions.get(question_id)
+        for position, sq_entry in enumerate(series.series_questions, start=1):
+            question = questions.get(sq_entry.question_id)
             if question is None:
                 raise StudentTestValidationError("A test question no longer exists")
-            total_marks += question.marks
+            effective_marks = Decimal(str(sq_entry.marks)) if sq_entry.marks is not None else question.marks
+            total_marks += effective_marks
             snapshots.append(
                 AttemptQuestion(
                     original_question_id=question.id,
                     position=position,
                     question_text=question.question,
-                    marks=question.marks,
+                    marks=effective_marks,
                     options_snapshot=json.dumps(
                         [
                             {
@@ -477,14 +496,20 @@ class StudentTestController:
                     "This attempt has already been submitted or has expired."
                 )
             now = datetime.now(timezone.utc)
+            sq_neg_map = {
+                sq.question_id: Decimal(str(sq.negative_marks or 0))
+                for sq in db.query(SeriesQuestion).filter(SeriesQuestion.series_id == attempt.series_id).all()
+            }
             score = Decimal("0")
             for question in attempt.questions:
-                awarded = (
-                    question.marks
-                    if question.selected_option_id is not None
-                    and question.selected_option_id == question.correct_option_id
-                    else Decimal("0")
-                )
+                neg_val = sq_neg_map.get(question.original_question_id, Decimal("0"))
+                if question.selected_option_id is not None:
+                    if question.selected_option_id == question.correct_option_id:
+                        awarded = question.marks
+                    else:
+                        awarded = -abs(neg_val)
+                else:
+                    awarded = Decimal("0")
                 question.marks_awarded = awarded
                 score += awarded
             attempt.score = score
@@ -692,6 +717,36 @@ class StudentTestController:
 
         show_correct = is_done if is_staff else (is_done and is_result_show)
 
+        sq_neg_map = {
+            sq.question_id: Decimal(str(sq.negative_marks or 0))
+            for sq in series.series_questions
+        } if series and series.series_questions else {}
+
+        if is_done and series:
+            recalc_score = Decimal("0")
+            need_commit = False
+            for q in attempt.questions:
+                neg_val = sq_neg_map.get(q.original_question_id, Decimal("0"))
+                if q.selected_option_id is not None:
+                    if q.correct_option_id is not None and str(q.selected_option_id) == str(q.correct_option_id):
+                        expected_awarded = q.marks
+                    else:
+                        expected_awarded = -abs(neg_val)
+                else:
+                    expected_awarded = Decimal("0")
+
+                if q.marks_awarded != expected_awarded:
+                    q.marks_awarded = expected_awarded
+                    need_commit = True
+                recalc_score += expected_awarded
+
+            if attempt.score != recalc_score or need_commit:
+                attempt.score = recalc_score
+                try:
+                    db.commit()
+                except Exception:
+                    db.rollback()
+
         # Fetch diagram records for questions & options in this attempt
         original_q_ids = [q.original_question_id for q in attempt.questions]
         question_diagrams_map = {}
@@ -764,6 +819,8 @@ class StudentTestController:
                     position=q.position,
                     question=q.question_text,
                     marks=q.marks,
+                    negative_marks=sq_neg_map.get(q.original_question_id, Decimal("0")),
+                    marks_awarded=q.marks_awarded,
                     diagram_path=q_diagram_path,
                     diagrams=diagrams_list,
                     options=options_response,
@@ -777,6 +834,10 @@ class StudentTestController:
         has_pdf = bool(file_path and file_path.exists()) and (is_staff or is_result_show)
         result_file_key = f"uploads/results/series_{series.id}/result.pdf" if has_pdf else None
 
+        neg_marks_list = [float(val) for val in sq_neg_map.values()]
+        has_neg = any(m > 0 for m in neg_marks_list)
+        max_neg = max(neg_marks_list, default=0.0)
+
         return AttemptResponse(
             id=attempt.id,
             series_id=attempt.series_id,
@@ -787,6 +848,8 @@ class StudentTestController:
             status=attempt.status,
             score=attempt.score if (is_staff or is_score_show) else Decimal("0"),
             total_marks=attempt.total_marks,
+            has_negative_marks=has_neg,
+            max_negative_mark=max_neg,
             is_result_show=True if is_staff else is_result_show,
             is_score_show=True if is_staff else is_score_show,
             result_file_key=result_file_key,
@@ -879,8 +942,29 @@ class StudentTestController:
         )
 
         if user_role == 2:
+            supervised_group_ids = (
+                db.query(TeacherGroup.id)
+                .filter(
+                    TeacherGroup.supervisor == user_id,
+                    TeacherGroup.is_deleted.is_(False),
+                )
+                .subquery()
+            )
+            member_group_ids = (
+                db.query(GroupTeacher.group_id)
+                .filter(
+                    GroupTeacher.teacher_id == user_id,
+                    GroupTeacher.is_deleted.is_(False),
+                )
+                .subquery()
+            )
             query = query.filter(
-                TestSeries.created_by == user_id
+                or_(
+                    TestSeries.created_by == user_id,
+                    TestSeries.supervisor_id == user_id,
+                    TestSeries.teacher_group_id.in_(supervised_group_ids),
+                    TestSeries.teacher_group_id.in_(member_group_ids),
+                )
             )
 
 

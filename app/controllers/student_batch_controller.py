@@ -22,25 +22,27 @@ class StudentBatchController:
     def get_all_batches(
         db: Session,
         org_id: int,
+        user_id: int | None = None,
+        user_role: int | None = None,
     ):
-        batches = (
-            db.query(Batch)
-            .filter(
-                Batch.org_id == org_id,
-                Batch.is_active == True,
-                Batch.deleted_at.is_(None),
-            )
-            .order_by(Batch.id.desc())
-            .all()
+        query = db.query(Batch).filter(
+            Batch.org_id == org_id,
+            Batch.is_active == True,
+            Batch.deleted_at.is_(None),
         )
 
-        return batches
+        if user_role == 2:
+            query = query.filter(Batch.supervisor == user_id)
+
+        return query.order_by(Batch.id.desc()).all()
 
     @staticmethod
     def get_batch(
         db: Session,
         org_id: int,
         batch_id: int,
+        user_id: int | None = None,
+        user_role: int | None = None,
     ):
         batch = (
             db.query(Batch)
@@ -58,6 +60,12 @@ class StudentBatchController:
                 detail="Student batch not found",
             )
 
+        if user_role == 2 and batch.supervisor != user_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You do not have permission to view or manage this batch",
+            )
+
         return batch
 
     @staticmethod
@@ -65,67 +73,19 @@ class StudentBatchController:
         db: Session,
         org_id: int,
         payload: StudentBatchCreate,
+        user_id: int | None = None,
+        user_role: int | None = None,
     ):
-        supervisor = (
-            db.query(User)
-            .join(
-                OrganizationUser,
-                OrganizationUser.user_id == User.id,
-            )
-            .filter(
-                User.id == payload.supervisor,
-                OrganizationUser.org_id == org_id,
-            )
-            .first()
-        )
+        if user_role == 2:
+            # Teacher automatically becomes supervisor of their own batch
+            supervisor_id = user_id
+        else:
+            if payload.supervisor is None:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Batch supervisor is required",
+                )
 
-        if not supervisor:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Supervisor not found in this organization",
-            )
-
-        # Change these role values according to your project.
-        # 1 = organization admin
-        # 2 = organization teacher
-        if supervisor.role not in [1, 2]:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Supervisor must be an organization admin or teacher",
-            )
-
-        batch = Batch(
-            org_id=org_id,
-            name=payload.name,
-            supervisor=payload.supervisor,
-            is_active=True,
-            created_at=datetime.utcnow(),
-            updated_at=datetime.utcnow(),
-        )
-
-        db.add(batch)
-        db.commit()
-        db.refresh(batch)
-
-        return batch
-
-    @staticmethod
-    def update_batch(
-        db: Session,
-        org_id: int,
-        batch_id: int,
-        payload: StudentBatchUpdate,
-    ):
-        batch = StudentBatchController.get_batch(
-            db=db,
-            org_id=org_id,
-            batch_id=batch_id,
-        )
-
-        if payload.name is not None:
-            batch.name = payload.name
-
-        if payload.supervisor is not None:
             supervisor = (
                 db.query(User)
                 .join(
@@ -150,8 +110,77 @@ class StudentBatchController:
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="Supervisor must be an organization admin or teacher",
                 )
+            supervisor_id = payload.supervisor
 
-            batch.supervisor = payload.supervisor
+        batch = Batch(
+            org_id=org_id,
+            name=payload.name,
+            supervisor=supervisor_id,
+            is_active=True,
+            created_at=datetime.utcnow(),
+            updated_at=datetime.utcnow(),
+        )
+
+        db.add(batch)
+        db.commit()
+        db.refresh(batch)
+
+        return batch
+
+    @staticmethod
+    def update_batch(
+        db: Session,
+        org_id: int,
+        batch_id: int,
+        payload: StudentBatchUpdate,
+        user_id: int | None = None,
+        user_role: int | None = None,
+    ):
+        batch = StudentBatchController.get_batch(
+            db=db,
+            org_id=org_id,
+            batch_id=batch_id,
+            user_id=user_id,
+            user_role=user_role,
+        )
+
+        if payload.name is not None:
+            batch.name = payload.name
+
+        if payload.supervisor is not None:
+            if user_role == 2:
+                if payload.supervisor != batch.supervisor:
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        detail="Teachers cannot change the batch supervisor",
+                    )
+            else:
+                supervisor = (
+                    db.query(User)
+                    .join(
+                        OrganizationUser,
+                        OrganizationUser.user_id == User.id,
+                    )
+                    .filter(
+                        User.id == payload.supervisor,
+                        OrganizationUser.org_id == org_id,
+                    )
+                    .first()
+                )
+
+                if not supervisor:
+                    raise HTTPException(
+                        status_code=status.HTTP_404_NOT_FOUND,
+                        detail="Supervisor not found in this organization",
+                    )
+
+                if supervisor.role not in [1, 2]:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail="Supervisor must be an organization admin or teacher",
+                    )
+
+                batch.supervisor = payload.supervisor
 
         if payload.is_active is not None:
             batch.is_active = payload.is_active
@@ -168,11 +197,15 @@ class StudentBatchController:
         db: Session,
         org_id: int,
         batch_id: int,
+        user_id: int | None = None,
+        user_role: int | None = None,
     ):
         batch = StudentBatchController.get_batch(
             db=db,
             org_id=org_id,
             batch_id=batch_id,
+            user_id=user_id,
+            user_role=user_role,
         )
 
         batch.is_active = False
@@ -190,11 +223,15 @@ class StudentBatchController:
         db: Session,
         org_id: int,
         batch_id: int,
+        user_id: int | None = None,
+        user_role: int | None = None,
     ):
         batch = StudentBatchController.get_batch(
             db=db,
             org_id=org_id,
             batch_id=batch_id,
+            user_id=user_id,
+            user_role=user_role,
         )
 
         students = (
@@ -225,11 +262,15 @@ class StudentBatchController:
         org_id: int,
         batch_id: int,
         payload: AddBatchStudentsRequest,
+        user_id: int | None = None,
+        user_role: int | None = None,
     ):
         batch = StudentBatchController.get_batch(
             db=db,
             org_id=org_id,
             batch_id=batch_id,
+            user_id=user_id,
+            user_role=user_role,
         )
 
         # Remove duplicate IDs from request.
@@ -311,11 +352,15 @@ class StudentBatchController:
         org_id: int,
         batch_id: int,
         student_id: int,
+        user_id: int | None = None,
+        user_role: int | None = None,
     ):
         batch = StudentBatchController.get_batch(
             db=db,
             org_id=org_id,
             batch_id=batch_id,
+            user_id=user_id,
+            user_role=user_role,
         )
 
         assignment = (

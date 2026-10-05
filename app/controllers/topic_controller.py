@@ -58,16 +58,35 @@ class TopicController:
         user_role: int,
         db: Session,
     ) -> list[TopicResponse]:
-        """Fetch all active topics in the application."""
+        """Fetch all active topics visible to the authenticated user."""
         if user_role not in (0, 1, 2, 3):
             return []
 
-        topics = (
-            db.query(Topic)
-            .filter(Topic.is_active.is_(True))
-            .order_by(Topic.id.desc())
-            .all()
-        )
+        if user_role == 0:
+            topics = (
+                db.query(Topic)
+                .filter(Topic.is_active.is_(True))
+                .order_by(Topic.id.desc())
+                .all()
+            )
+        else:
+            membership = (
+                db.query(OrganizationUser)
+                .filter(OrganizationUser.user_id == user_id)
+                .order_by(OrganizationUser.org_id)
+                .first()
+            )
+            user_org_id = membership.org_id if membership else -1
+            topics = (
+                db.query(Topic)
+                .filter(
+                    Topic.is_active.is_(True),
+                    (Topic.org_id == 0) | (Topic.org_id == user_org_id),
+                )
+                .order_by(Topic.id.desc())
+                .all()
+            )
+
         return [TopicResponse.model_validate(t) for t in topics]
 
     @staticmethod

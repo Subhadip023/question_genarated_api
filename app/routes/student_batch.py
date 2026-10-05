@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Request, status
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -28,6 +28,7 @@ router = APIRouter(
 )
 def create_student_batch(
     payload: StudentBatchCreate,
+    request: Request,
     org_id: int = Depends(get_current_org_id),
     db: Session = Depends(get_db),
 ):
@@ -35,6 +36,8 @@ def create_student_batch(
         db=db,
         org_id=org_id,
         payload=payload,
+        user_id=getattr(request.state, "user_id", None),
+        user_role=getattr(request.state, "user_role", None),
     )
 
 @router.get(
@@ -42,12 +45,15 @@ def create_student_batch(
     response_model=list[StudentBatchResponse],
 )
 def get_all_student_batches(
+    request: Request,
     org_id: int = Depends(get_current_org_id),
     db: Session = Depends(get_db),
 ):
     return StudentBatchController.get_all_batches(
         db=db,
         org_id=org_id,
+        user_id=getattr(request.state, "user_id", None),
+        user_role=getattr(request.state, "user_role", None),
     )
 
 @router.get(
@@ -56,6 +62,7 @@ def get_all_student_batches(
 )
 def get_student_batch(
     batch_id: int,
+    request: Request,
     org_id: int = Depends(get_current_org_id),
     db: Session = Depends(get_db),
 ):
@@ -63,6 +70,8 @@ def get_student_batch(
         db=db,
         org_id=org_id,
         batch_id=batch_id,
+        user_id=getattr(request.state, "user_id", None),
+        user_role=getattr(request.state, "user_role", None),
     )
 
 @router.put(
@@ -72,6 +81,7 @@ def get_student_batch(
 def update_student_batch(
     batch_id: int,
     payload: StudentBatchUpdate,
+    request: Request,
     org_id: int = Depends(get_current_org_id),
     db: Session = Depends(get_db),
 ):
@@ -80,11 +90,14 @@ def update_student_batch(
         org_id=org_id,
         batch_id=batch_id,
         payload=payload,
+        user_id=getattr(request.state, "user_id", None),
+        user_role=getattr(request.state, "user_role", None),
     )
 
 @router.delete("/{batch_id}")
 def delete_student_batch(
     batch_id: int,
+    request: Request,
     org_id: int = Depends(get_current_org_id),
     db: Session = Depends(get_db),
 ):
@@ -92,6 +105,8 @@ def delete_student_batch(
         db=db,
         org_id=org_id,
         batch_id=batch_id,
+        user_id=getattr(request.state, "user_id", None),
+        user_role=getattr(request.state, "user_role", None),
     )
 
 @router.get(
@@ -100,6 +115,7 @@ def delete_student_batch(
 )
 def get_batch_students(
     batch_id: int,
+    request: Request,
     org_id: int = Depends(get_current_org_id),
     db: Session = Depends(get_db),
 ):
@@ -107,12 +123,15 @@ def get_batch_students(
         db=db,
         org_id=org_id,
         batch_id=batch_id,
+        user_id=getattr(request.state, "user_id", None),
+        user_role=getattr(request.state, "user_role", None),
     )
 
 @router.post("/{batch_id}/students")
 def add_batch_students(
     batch_id: int,
     payload: AddBatchStudentsRequest,
+    request: Request,
     org_id: int = Depends(get_current_org_id),
     db: Session = Depends(get_db),
 ):
@@ -121,6 +140,8 @@ def add_batch_students(
         org_id=org_id,
         batch_id=batch_id,
         payload=payload,
+        user_id=getattr(request.state, "user_id", None),
+        user_role=getattr(request.state, "user_role", None),
     )
 
 @router.delete(
@@ -129,6 +150,7 @@ def add_batch_students(
 def remove_batch_student(
     batch_id: int,
     student_id: int,
+    request: Request,
     org_id: int = Depends(get_current_org_id),
     db: Session = Depends(get_db),
 ):
@@ -137,4 +159,6 @@ def remove_batch_student(
         org_id=org_id,
         batch_id=batch_id,
         student_id=student_id,
+        user_id=getattr(request.state, "user_id", None),
+        user_role=getattr(request.state, "user_role", None),
     )
