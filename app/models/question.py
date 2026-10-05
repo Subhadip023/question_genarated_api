@@ -6,7 +6,7 @@ This acts as the Model (M) layer in MVC.
 from datetime import datetime, timezone
 from decimal import Decimal
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, Text, Numeric
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, Text, Numeric
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -16,6 +16,7 @@ class Question(Base):
     """ORM model for the questions table."""
 
     __tablename__ = "questions"
+    __table_args__ = (Index("ix_fk_questions_topic_id", "topic_id"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
 

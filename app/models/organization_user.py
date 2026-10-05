@@ -1,6 +1,6 @@
 """Association model linking organizations and users."""
 
-from sqlalchemy import ForeignKey, Integer
+from sqlalchemy import ForeignKey, Index, Integer
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
@@ -10,6 +10,7 @@ class OrganizationUser(Base):
     """Membership row for a user in an organization."""
 
     __tablename__ = "organization_users"
+    __table_args__ = (Index("ix_fk_organization_users_user_id", "user_id"),)
 
     org_id: Mapped[int] = mapped_column(
         Integer,

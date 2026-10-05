@@ -2,7 +2,7 @@
 
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -12,6 +12,10 @@ class GroupTeacher(Base):
     """ORM model for group_teachers table."""
 
     __tablename__ = "group_teachers"
+    __table_args__ = (
+        Index("ix_fk_group_teachers_group_id", "group_id"),
+        Index("ix_fk_group_teachers_teacher_id", "teacher_id"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     group_id: Mapped[int] = mapped_column(
