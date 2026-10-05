@@ -100,3 +100,37 @@ This section defines the access control rules for Student Batches (`/student-bat
    - An **admin** can reassign the supervisor of a batch.
    - A **teacher cannot change the supervisor** of a batch. Attempting to modify the supervisor field returns `403 Forbidden` ("Teachers cannot change the batch supervisor").
 
+---
+
+## 6. Teacher Groups Access Control & Role Rules
+
+This section defines the access control rules for Teacher Groups (`/teacher-groups`).
+
+### A. Group Ownership & Visibility
+- **Admin (`role = 0` or `1`)**: Can view, manage, and CRUD **all teacher groups** in the organization.
+- **Teacher (`role = 2`)**: Can view and CRUD **only their own teacher groups** (`teacher_group.supervisor == user_id`).
+  - A teacher group is considered the teacher's own if:
+    1. The teacher created the group (they are automatically set as the supervisor).
+    2. An admin created the group and assigned the teacher as the supervisor.
+  - Member teachers who are not the supervisor **cannot** see the group (they only see groups they supervise).
+
+### B. Teacher Group CRUD Permissions Matrix
+
+| Capability / Action | Admin (`0, 1`) | Group Supervisor Teacher (`2`) | Other Teachers / Members (`2`) |
+| :--- | :---: | :---: | :---: |
+| **List Groups** (`GET /teacher-groups`) | ✅ All org groups | ✅ Own supervised groups only | ❌ Excluded |
+| **View Group Details** (`GET /teacher-groups/{id}`) | ✅ Yes | ✅ Yes | ❌ 404 / 403 Forbidden |
+| **Create Group** (`POST /teacher-groups`) | ✅ Can select any supervisor | ✅ Auto-set to self as supervisor | — |
+| **Edit Group Details & Members** (`PUT /teacher-groups/{id}`) | ✅ Yes (including supervisor) | ✅ Yes (**cannot** change supervisor) | ❌ 403 Forbidden |
+| **Delete Group** (`DELETE /teacher-groups/{id}`) | ✅ Yes | ✅ Yes | ❌ 403 Forbidden |
+
+### C. Supervisor Assignment Rules
+1. **Group Creation**:
+   - When an **admin** creates a teacher group, they can select any active teacher or admin as supervisor.
+   - When a **teacher** creates a teacher group, they **cannot select another supervisor**. The creating teacher is automatically set as the supervisor (`teacher_group.supervisor = user_id`).
+2. **Group Editing**:
+   - An **admin** can reassign the supervisor of a teacher group.
+   - A **teacher cannot change the supervisor** of a teacher group. Attempting to modify the supervisor field returns `403 Forbidden` ("Teachers cannot change the group supervisor").
+   - The supervisor teacher **can add or remove member teachers** (`teacher_ids`).
+
+

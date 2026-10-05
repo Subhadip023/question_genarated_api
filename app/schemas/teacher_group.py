@@ -31,7 +31,7 @@ class TeacherGroupCreate(BaseModel):
     """Request payload for creating a teacher group."""
 
     name: str = Field(..., min_length=1, max_length=255, description="Name of the teacher group")
-    supervisor: int = Field(..., description="User ID of the supervisor (teacher or admin)")
+    supervisor: int | None = Field(default=None, description="User ID of the supervisor (teacher or admin)")
     org_id: int | None = Field(
         default=None, description="Organization ID (optional, auto-filled for non-superadmin)"
     )

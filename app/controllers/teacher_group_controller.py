@@ -105,10 +105,16 @@ class TeacherGroupController:
         else:
             org_id = cls._get_user_org_id(user_id, user_role, db)
 
-        # Validate supervisor user exists
-        supervisor_user = db.query(User).filter(User.id == data.supervisor).first()
-        if not supervisor_user:
-            raise TeacherGroupValidationError(f"Supervisor with user ID {data.supervisor} does not exist")
+        if user_role == 2:
+            # Teacher automatically becomes supervisor of their own group
+            supervisor_id = user_id
+        else:
+            if data.supervisor is None:
+                raise TeacherGroupValidationError("Supervisor user ID is required")
+            supervisor_user = db.query(User).filter(User.id == data.supervisor).first()
+            if not supervisor_user:
+                raise TeacherGroupValidationError(f"Supervisor with user ID {data.supervisor} does not exist")
+            supervisor_id = data.supervisor
 
         # Validate teacher_ids exist
         if data.teacher_ids:
@@ -126,7 +132,7 @@ class TeacherGroupController:
             org_id=org_id,
             created_by=user_id,
             name=data.name,
-            supervisor=data.supervisor,
+            supervisor=supervisor_id,
             is_active=data.is_active,
             is_deleted=False,
         )
@@ -179,6 +185,9 @@ class TeacherGroupController:
             user_org_id = cls._get_user_org_id(user_id, user_role, db)
             query = query.filter(TeacherGroup.org_id == user_org_id)
 
+        if user_role == 2:
+            query = query.filter(TeacherGroup.supervisor == user_id)
+
         groups = query.order_by(TeacherGroup.id.desc()).all()
         return [cls._build_response(g, db) for g in groups]
 
@@ -210,6 +219,9 @@ class TeacherGroupController:
             user_org_id = cls._get_user_org_id(user_id, user_role, db)
             if group.org_id != user_org_id:
                 return None
+
+        if user_role == 2 and group.supervisor != user_id:
+            return None
 
         return cls._build_response(group, db)
 
@@ -244,7 +256,16 @@ class TeacherGroupController:
                     "You can only update teacher groups belonging to your organization"
                 )
 
-        if data.supervisor is not None:
+        if user_role == 2:
+            if group.supervisor != user_id:
+                raise TeacherGroupPermissionError(
+                    "You do not have permission to edit this teacher group"
+                )
+            if data.supervisor is not None and data.supervisor != group.supervisor:
+                raise TeacherGroupPermissionError(
+                    "Teachers cannot change the group supervisor"
+                )
+        elif data.supervisor is not None:
             supervisor_user = db.query(User).filter(User.id == data.supervisor).first()
             if not supervisor_user:
                 raise TeacherGroupValidationError(
@@ -337,6 +358,11 @@ class TeacherGroupController:
                 raise TeacherGroupPermissionError(
                     "You can only delete teacher groups belonging to your organization"
                 )
+
+        if user_role == 2 and group.supervisor != user_id:
+            raise TeacherGroupPermissionError(
+                "You do not have permission to delete this teacher group"
+            )
 
         now = datetime.now(timezone.utc)
 
