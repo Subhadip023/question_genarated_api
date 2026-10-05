@@ -5,7 +5,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 class StudentBatchCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=255)
-    supervisor: int
+    supervisor: int | None = None
 
 
 class StudentBatchUpdate(BaseModel):

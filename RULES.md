@@ -66,3 +66,37 @@ A group teacher collaborates on the content of the test series.
 | `/api/test-series/{id}/result-sheet` | `POST` | Admin, Creator, Supervisor, Group Teacher | Allows uploading Answer Key PDF. |
 | `/api/test-series/{id}/results` | `GET` | Admin, Creator, Supervisor, Group Teacher | Access results and submission records. |
 | `/api/test-series/{id}` | `DELETE` | Admin, Creator | Only creator or admin can delete (blocked if attempts exist). |
+
+---
+
+## 5. Student Batches Access Control & Role Rules
+
+This section defines the access control rules for Student Batches (`/student-batches`).
+
+### A. Batch Ownership & Visibility
+- **Admin (`role = 0` or `1`)**: Can view, manage, and CRUD **all batches** in the organization.
+- **Teacher (`role = 2`)**: Can view and CRUD **only their own batches** (`batch.supervisor == user_id`).
+  - A batch is considered the teacher's own if:
+    1. The teacher created the batch (they are automatically set as the supervisor).
+    2. An admin created the batch and assigned the teacher as the supervisor.
+  - Teachers **cannot** see or manipulate batches belonging to other supervisors.
+
+### B. Batch CRUD Permissions Matrix
+
+| Capability / Action | Admin (`0, 1`) | Batch Supervisor Teacher (`2`) | Other Teachers (`2`) |
+| :--- | :---: | :---: | :---: |
+| **List Batches** (`GET /student-batches`) | ✅ All org batches | ✅ Own batches only | ❌ Excluded |
+| **View Batch Details** (`GET /student-batches/{id}`) | ✅ Yes | ✅ Yes | ❌ 403 Forbidden |
+| **Create Batch** (`POST /student-batches`) | ✅ Can select any supervisor | ✅ Auto-set to self as supervisor | — |
+| **Edit Batch Details** (`PUT /student-batches/{id}`) | ✅ Yes (including supervisor) | ✅ Yes (**cannot** change supervisor) | ❌ 403 Forbidden |
+| **Delete Batch** (`DELETE /student-batches/{id}`) | ✅ Yes | ✅ Yes | ❌ 403 Forbidden |
+| **Manage Batch Students** (`POST/DELETE .../students`) | ✅ Yes | ✅ Yes | ❌ 403 Forbidden |
+
+### C. Supervisor Assignment Rules
+1. **Batch Creation**:
+   - When an **admin** creates a batch, they can select any active teacher or admin in the organization as the supervisor.
+   - When a **teacher** creates a batch, they **cannot select another supervisor**. The creating teacher is automatically set as the supervisor (`batch.supervisor = user_id`).
+2. **Batch Editing**:
+   - An **admin** can reassign the supervisor of a batch.
+   - A **teacher cannot change the supervisor** of a batch. Attempting to modify the supervisor field returns `403 Forbidden` ("Teachers cannot change the batch supervisor").
+
