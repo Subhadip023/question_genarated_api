@@ -23,6 +23,8 @@ from app.models.series_question import SeriesQuestion
 from app.models.test_access import TestAccess
 from app.models.topic import Topic
 from app.models.test_attempt import AttemptQuestion, TestAttempt
+from app.models.group_teacher import GroupTeacher
+from app.models.teacher_group import TeacherGroup
 from app.models.test_series import TestSeries
 from app.schemas.student_test import (
     AttemptHistoryResponse,
@@ -940,8 +942,29 @@ class StudentTestController:
         )
 
         if user_role == 2:
+            supervised_group_ids = (
+                db.query(TeacherGroup.id)
+                .filter(
+                    TeacherGroup.supervisor == user_id,
+                    TeacherGroup.is_deleted.is_(False),
+                )
+                .subquery()
+            )
+            member_group_ids = (
+                db.query(GroupTeacher.group_id)
+                .filter(
+                    GroupTeacher.teacher_id == user_id,
+                    GroupTeacher.is_deleted.is_(False),
+                )
+                .subquery()
+            )
             query = query.filter(
-                TestSeries.created_by == user_id
+                or_(
+                    TestSeries.created_by == user_id,
+                    TestSeries.supervisor_id == user_id,
+                    TestSeries.teacher_group_id.in_(supervised_group_ids),
+                    TestSeries.teacher_group_id.in_(member_group_ids),
+                )
             )
 
 

@@ -20,6 +20,7 @@ from app.models.diagram import Diagram
 from app.models.organization_user import OrganizationUser
 from app.models.question import Question
 from app.models.series_question import SeriesQuestion
+from app.models.group_teacher import GroupTeacher
 from app.models.teacher_group import TeacherGroup
 from app.models.test_attempt import TestAttempt
 from app.models.test_access import TestAccess
@@ -276,15 +277,60 @@ class TestSeriesController:
             if tg and tg.supervisor == user_id:
                 is_supervisor = True
 
-        is_authorized = is_admin or is_supervisor or (series.created_by == user_id)
+        is_creator = series.created_by == user_id
+
+        is_group_teacher = False
+        if series.teacher_group_id:
+            gt = (
+                db.query(GroupTeacher)
+                .filter(
+                    GroupTeacher.group_id == series.teacher_group_id,
+                    GroupTeacher.teacher_id == user_id,
+                    GroupTeacher.is_deleted.is_(False),
+                )
+                .first()
+            )
+            if gt:
+                is_group_teacher = True
+
+        is_authorized = is_admin or is_supervisor or is_creator or is_group_teacher
 
         if not is_authorized:
             raise TestSeriesPermissionError("You do not have permission to edit this test series")
 
         updates = data.model_dump(exclude_unset=True)
 
-        # Restrict result publication / score visibility changes to supervisor and admin only
-        if "is_result_show" in updates or "is_score_show" in updates:
+        # Enforce role-based edit restrictions
+        if is_group_teacher and not (is_admin or is_supervisor or is_creator):
+            if "is_result_show" in updates or "is_score_show" in updates:
+                raise TestSeriesPermissionError("Only supervisor and admin can publish or change test results visibility")
+
+            # Check if attempting to change test settings
+            if "name" in updates and updates["name"] != series.name:
+                raise TestSeriesPermissionError("Group teachers cannot change test series name")
+            if "access_type" in updates and updates["access_type"] != series.access_type:
+                raise TestSeriesPermissionError("Group teachers cannot change test access type")
+            if "duration_seconds" in updates and updates["duration_seconds"] != series.duration_seconds:
+                raise TestSeriesPermissionError("Group teachers cannot change test duration")
+            if "valid_until" in updates and updates["valid_until"] != series.valid_until:
+                raise TestSeriesPermissionError("Group teachers cannot change test validity period")
+            if "supervisor_id" in updates and updates["supervisor_id"] != series.supervisor_id:
+                raise TestSeriesPermissionError("Group teachers cannot change supervisor assignment")
+            if "teacher_group_id" in updates and updates["teacher_group_id"] != series.teacher_group_id:
+                raise TestSeriesPermissionError("Group teachers cannot change teacher group assignment")
+            if "batch_id" in updates or "batch_ids" in updates or "student_ids" in updates:
+                raise TestSeriesPermissionError("Group teachers cannot change batch or student assignments")
+            if "is_active" in updates and updates["is_active"] != series.is_active:
+                raise TestSeriesPermissionError("Group teachers cannot activate/deactivate test series")
+            if "regenerate_invite_token" in updates and updates["regenerate_invite_token"]:
+                raise TestSeriesPermissionError("Group teachers cannot regenerate invite tokens")
+
+            # Ensure non-question settings are not applied for group teachers
+            for non_q_field in list(updates.keys()):
+                if non_q_field != "questions":
+                    updates.pop(non_q_field)
+
+        elif "is_result_show" in updates or "is_score_show" in updates:
             if not (is_admin or is_supervisor):
                 raise TestSeriesPermissionError("Only supervisor and admin can publish or change test results visibility")
         questions = updates.pop("questions", None)
@@ -297,6 +343,13 @@ class TestSeriesController:
                 Question.is_active.is_(True)
             )
 
+            # Allow questions already attached to this test series to be retained/updated
+            existing_series_q_ids = set(
+                row[0] for row in db.query(SeriesQuestion.question_id)
+                .filter(SeriesQuestion.series_id == series_id)
+                .all()
+            )
+
             question_query = QuestionController._apply_visibility_filter(
                 question_query,
                 user_id,
@@ -304,7 +357,7 @@ class TestSeriesController:
                 db
             )
 
-            allowed_ids = {question.id for question in question_query.all()}
+            allowed_ids = {question.id for question in question_query.all()} | (existing_series_q_ids & set(question_ids))
 
             if allowed_ids != set(question_ids):
                 raise TestSeriesQuestionError(
@@ -556,7 +609,30 @@ class TestSeriesController:
             org_id = membership.org_id if membership else 0
             return query.filter(TestSeries.org_id == org_id)
         elif role_int == 2:
-            return query.filter(TestSeries.created_by == user_id)
+            supervised_group_ids = (
+                db.query(TeacherGroup.id)
+                .filter(
+                    TeacherGroup.supervisor == user_id,
+                    TeacherGroup.is_deleted.is_(False),
+                )
+                .subquery()
+            )
+            member_group_ids = (
+                db.query(GroupTeacher.group_id)
+                .filter(
+                    GroupTeacher.teacher_id == user_id,
+                    GroupTeacher.is_deleted.is_(False),
+                )
+                .subquery()
+            )
+            return query.filter(
+                or_(
+                    TestSeries.created_by == user_id,
+                    TestSeries.supervisor_id == user_id,
+                    TestSeries.teacher_group_id.in_(supervised_group_ids),
+                    TestSeries.teacher_group_id.in_(member_group_ids),
+                )
+            )
 
         return query.filter(False)
 
@@ -678,7 +754,21 @@ class TestSeriesController:
             if tg and tg.supervisor == user_id:
                 is_supervisor = True
 
-        is_authorized = is_admin or is_supervisor or (series.created_by == user_id)
+        is_group_teacher = False
+        if series.teacher_group_id:
+            gt = (
+                db.query(GroupTeacher)
+                .filter(
+                    GroupTeacher.group_id == series.teacher_group_id,
+                    GroupTeacher.teacher_id == user_id,
+                    GroupTeacher.is_deleted.is_(False),
+                )
+                .first()
+            )
+            if gt:
+                is_group_teacher = True
+
+        is_authorized = is_admin or is_supervisor or (series.created_by == user_id) or is_group_teacher
 
         if not is_authorized:
             raise TestSeriesPermissionError("You do not have permission to upload a result sheet for this test series")
