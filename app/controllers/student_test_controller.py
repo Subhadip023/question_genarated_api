@@ -517,15 +517,15 @@ class StudentTestController:
     ) -> list[AttemptHistoryResponse]:
         StudentTestController._require_student(user_role)
         attempts = (
-            db.query(TestAttempt)
+            db.query(TestAttempt, TestSeries)
+            .outerjoin(TestSeries, TestSeries.id == TestAttempt.series_id)
             .filter(TestAttempt.user_id == user_id)
             .order_by(TestAttempt.started_at.desc())
             .all()
         )
         result = []
-        for attempt in attempts:
+        for attempt, series in attempts:
             StudentTestController._mark_expired(attempt, db)
-            series = db.query(TestSeries).filter(TestSeries.id == attempt.series_id).first()
             result.append(
                 AttemptHistoryResponse(
                     id=attempt.id,

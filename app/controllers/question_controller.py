@@ -3,7 +3,7 @@ Question controller — handles request orchestration between route and model.
 This acts as the Controller (C) layer in MVC.
 """
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session, joinedload
 
 from app.models.diagram import Diagram
@@ -214,6 +214,10 @@ class QuestionController:
         db: Session,
         topic_id: int | None = None,
         search: str | None = None,
+        question_ids: list[int] | None = None,
+        is_global: bool | None = None,
+        organization_id: int | None = None,
+        question_user_id: int | None = None,
     ) -> PaginatedQuestionResponse:
         """Fetch one page of questions visible to the authenticated user."""
         query = db.query(Question)
@@ -222,8 +226,19 @@ class QuestionController:
         )
         if topic_id is not None:
             query = query.filter(Question.topic_id == topic_id)
-        if search:
-            query = query.filter(Question.question.ilike(f"%{search}%"))
+        if search and (term := search.strip()):
+            search_filter = Question.question.ilike(f"%{term}%")
+            if term.isdecimal():
+                search_filter = or_(search_filter, Question.id == int(term))
+            query = query.filter(search_filter)
+        if question_ids is not None:
+            query = query.filter(Question.id.in_(question_ids))
+        if is_global is not None:
+            query = query.filter(Question.is_global.is_(is_global))
+        if organization_id is not None:
+            query = query.filter(Question.organization_id == organization_id)
+        if question_user_id is not None:
+            query = query.filter(Question.user_id == question_user_id)
         total = query.count()
         questions = (
             query.options(joinedload(Question.options), joinedload(Question.topic))

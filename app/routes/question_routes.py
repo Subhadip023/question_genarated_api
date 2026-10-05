@@ -88,6 +88,10 @@ def list_questions(
     page_size: int = Query(default=20, ge=1, le=100),
     topic_id: int | None = Query(default=None),
     search: str | None = Query(default=None, max_length=200),
+    question_ids: list[int] | None = Query(default=None),
+    is_global: bool | None = Query(default=None),
+    organization_id: int | None = Query(default=None),
+    question_user_id: int | None = Query(default=None),
     db: Session = Depends(get_db),
 ) -> PaginatedQuestionResponse:
     return QuestionController.get_all_questions(
@@ -98,6 +102,10 @@ def list_questions(
         db=db,
         topic_id=topic_id,
         search=search,
+        question_ids=question_ids,
+        is_global=is_global,
+        organization_id=organization_id,
+        question_user_id=question_user_id,
     )
 
 

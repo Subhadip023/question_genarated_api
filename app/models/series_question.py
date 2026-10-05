@@ -1,6 +1,6 @@
 """Ordered association between test series and questions."""
 
-from sqlalchemy import Float, ForeignKey, Integer
+from sqlalchemy import Float, ForeignKey, Index, Integer
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -8,13 +8,16 @@ from app.database import Base
 
 class SeriesQuestion(Base):
     __tablename__ = "series_questions"
+    __table_args__ = (Index("ix_fk_series_questions_question_id", "question_id"),)
 
     series_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("test_series.id", ondelete="CASCADE"), primary_key=True
     )
 
     question_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("questions.id", ondelete="CASCADE"), primary_key=True
+        Integer,
+        ForeignKey("questions.id", ondelete="CASCADE"),
+        primary_key=True,
     )
 
     marks: Mapped[float | None] = mapped_column(
@@ -32,4 +35,3 @@ class SeriesQuestion(Base):
     )
 
     question: Mapped["Question"] = relationship("Question")
-

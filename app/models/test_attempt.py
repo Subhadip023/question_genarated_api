@@ -3,7 +3,7 @@
 from datetime import datetime, timezone
 from decimal import Decimal
 
-from sqlalchemy import DateTime, ForeignKey, Integer, Numeric, String, Text
+from sqlalchemy import DateTime, ForeignKey, Index, Integer, Numeric, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.constants.attempt_status import AttemptStatus
 from app.database import Base
@@ -11,13 +11,14 @@ from app.database import Base
 
 class TestAttempt(Base):
     __tablename__ = "test_attempts"
+    __table_args__ = (Index("ix_fk_test_attempts_series_id", "series_id"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     series_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("test_series.id", ondelete="RESTRICT"), nullable=False
     )
     user_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+        Integer, ForeignKey("users.id", ondelete="RESTRICT"), nullable=False, index=True
     )
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
@@ -36,6 +37,7 @@ class TestAttempt(Base):
 
 class AttemptQuestion(Base):
     __tablename__ = "attempt_questions"
+    __table_args__ = (Index("ix_fk_attempt_questions_attempt_id", "attempt_id"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     attempt_id: Mapped[int] = mapped_column(

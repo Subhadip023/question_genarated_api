@@ -2,7 +2,7 @@
 
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -10,6 +10,7 @@ from app.database import Base
 
 class TestSeries(Base):
     __tablename__ = "test_series"
+    __table_args__ = (Index("ix_fk_test_series_created_by", "created_by"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     code: Mapped[str | None] = mapped_column(
