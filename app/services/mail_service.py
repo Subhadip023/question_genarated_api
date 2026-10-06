@@ -7,6 +7,7 @@ import logging
 import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+import httpx
 
 from app.config import settings
 
@@ -28,14 +29,10 @@ def send_email(
     """
     Global utility function to send emails from anywhere in the application.
 
-    Usage:
-        from app.services.mail_service import send_email
-
-        send_email(
-            to_email="user@example.com",
-            subject="Hello",
-            body="<h1>Welcome to Safalya</h1>"
-        )
+    Supports:
+    1. Brevo REST API (preferred when BREVO_API_KEY is configured in .env)
+    2. SMTP fallback (when SMTP_USER and SMTP_PASSWORD are configured)
+    3. Development simulation logger (when neither is configured)
     """
     if not to_email or not to_email.strip():
         if fail_silently:
@@ -49,6 +46,80 @@ def send_email(
             return {"status": "skipped", "message": "Email body was empty"}
         raise MailServiceError("Email body cannot be empty.")
 
+    # 1. Brevo REST API (HTTPS - never blocked by cloud firewalls or ports)
+    if settings.brevo_api_key and settings.brevo_api_key.strip():
+        from_email = (
+            sender_email
+            or settings.brevo_sender_email
+            or settings.smtp_from_email
+            or settings.smtp_user
+            or "matainja0144@gmail.com"
+        )
+        sender_name = settings.brevo_sender_name or "Question Master"
+        is_html = "<" in body and ">" in body
+
+        payload = {
+            "sender": {
+                "name": sender_name,
+                "email": from_email.strip(),
+            },
+            "to": [
+                {
+                    "email": to_email.strip(),
+                }
+            ],
+            "subject": subject.strip() if subject else "Notification",
+        }
+        if is_html:
+            payload["htmlContent"] = body
+        else:
+            payload["textContent"] = body
+
+        try:
+            logger.info(f"Sending email to {to_email} via Brevo API...")
+            with httpx.Client(timeout=15.0) as client:
+                response = client.post(
+                    "https://api.brevo.com/v3/smtp/email",
+                    headers={
+                        "accept": "application/json",
+                        "api-key": settings.brevo_api_key.strip(),
+                        "content-type": "application/json",
+                    },
+                    json=payload,
+                )
+                if response.status_code in (200, 201):
+                    logger.info(f"Email successfully delivered to {to_email} via Brevo API.")
+                    return {
+                        "status": "success",
+                        "message": f"Email successfully delivered to {to_email}",
+                        "to_email": to_email,
+                        "subject": subject,
+                    }
+                else:
+                    error_msg = f"Brevo API error ({response.status_code}): {response.text}"
+                    logger.error(error_msg)
+                    if fail_silently:
+                        return {
+                            "status": "error",
+                            "message": error_msg,
+                            "to_email": to_email,
+                            "subject": subject,
+                        }
+                    raise MailServiceError(error_msg)
+        except Exception as exc:
+            if isinstance(exc, MailServiceError):
+                raise
+            logger.error(f"Failed to send email to {to_email} via Brevo API ({exc}).")
+            if fail_silently:
+                return {
+                    "status": "error",
+                    "message": f"Brevo API error: {exc}",
+                    "to_email": to_email,
+                    "subject": subject,
+                }
+            raise MailServiceError(f"Brevo API error: {exc}") from exc
+
+    # 2. SMTP fallback
     from_email = (
         sender_email
         or settings.smtp_from_email
@@ -68,6 +139,7 @@ def send_email(
 
     # Check if SMTP server is configured
     if settings.smtp_user and settings.smtp_password:
+
         try:
             logger.info(
                 f"Connecting to SMTP server {settings.smtp_host}:{settings.smtp_port} to send mail to {to_email}..."

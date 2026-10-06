@@ -25,6 +25,11 @@ class Settings(BaseSettings):
     # Redis
     redis_url: str = "redis://127.0.0.1:6379/0"
 
+    # Brevo Email API Settings (configured via .env)
+    brevo_api_key: str = ""
+    brevo_sender_email: str = "matainja0110@gmail.com"
+    brevo_sender_name: str = "Safalya"
+
     # SMTP Email Settings (optional, configured via .env)
     smtp_host: str = "smtp.gmail.com"
     smtp_port: int = 587
@@ -33,6 +38,7 @@ class Settings(BaseSettings):
     smtp_from_email: str = ""
     smtp_use_tls: bool = True
     smtp_use_ssl: bool = False
+
 
     model_config = SettingsConfigDict(
         env_file=".env",
