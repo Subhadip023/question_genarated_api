@@ -3,13 +3,16 @@ Mail Service — handles sending emails using SMTP (smtplib).
 Provides a global `send_email` utility function usable everywhere in the backend.
 """
 
+import json
 import logging
 import smtplib
+import urllib.request
+import urllib.error
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
-import httpx
 
 from app.config import settings
+
 
 logger = logging.getLogger(__name__)
 
@@ -77,17 +80,20 @@ def send_email(
 
         try:
             logger.info(f"Sending email to {to_email} via Brevo API...")
-            with httpx.Client(timeout=15.0) as client:
-                response = client.post(
-                    "https://api.brevo.com/v3/smtp/email",
-                    headers={
-                        "accept": "application/json",
-                        "api-key": settings.brevo_api_key.strip(),
-                        "content-type": "application/json",
-                    },
-                    json=payload,
-                )
-                if response.status_code in (200, 201):
+            req_data = json.dumps(payload).encode("utf-8")
+            req = urllib.request.Request(
+                "https://api.brevo.com/v3/smtp/email",
+                data=req_data,
+                headers={
+                    "accept": "application/json",
+                    "api-key": settings.brevo_api_key.strip(),
+                    "content-type": "application/json",
+                },
+                method="POST",
+            )
+            try:
+                with urllib.request.urlopen(req, timeout=15) as resp:
+                    resp_body = resp.read().decode("utf-8")
                     logger.info(f"Email successfully delivered to {to_email} via Brevo API.")
                     return {
                         "status": "success",
@@ -95,17 +101,18 @@ def send_email(
                         "to_email": to_email,
                         "subject": subject,
                     }
-                else:
-                    error_msg = f"Brevo API error ({response.status_code}): {response.text}"
-                    logger.error(error_msg)
-                    if fail_silently:
-                        return {
-                            "status": "error",
-                            "message": error_msg,
-                            "to_email": to_email,
-                            "subject": subject,
-                        }
-                    raise MailServiceError(error_msg)
+            except urllib.error.HTTPError as http_err:
+                err_detail = http_err.read().decode("utf-8")
+                error_msg = f"Brevo API error ({http_err.code}): {err_detail}"
+                logger.error(error_msg)
+                if fail_silently:
+                    return {
+                        "status": "error",
+                        "message": error_msg,
+                        "to_email": to_email,
+                        "subject": subject,
+                    }
+                raise MailServiceError(error_msg) from http_err
         except Exception as exc:
             if isinstance(exc, MailServiceError):
                 raise
