@@ -17,6 +17,7 @@ from app.controllers.question_controller import QuestionController
 from app.models.batch import Batch
 from app.models.batch_student import BatchStudent
 from app.models.diagram import Diagram
+from app.models.organization import Organization
 from app.models.organization_user import OrganizationUser
 from app.models.question import Question
 from app.models.series_question import SeriesQuestion
@@ -1009,9 +1010,22 @@ class TestSeriesController:
                 if d.ref_id not in opt_diag_map:
                     opt_diag_map[d.ref_id] = d.path
 
+        org_name = None
+        org_logo = None
+        if test_series.org_id:
+            org = db.query(Organization).filter(Organization.id == test_series.org_id).first()
+            if org:
+                org_name = org.name
+                org_logo = org.logo
+
         return {
             "series_id": test_series.id,
             "series_name": test_series.name,
+            "duration_seconds": test_series.duration_seconds,
+            "valid_until": test_series.valid_until.isoformat() if test_series.valid_until else None,
+            "org_id": test_series.org_id,
+            "organization_name": org_name,
+            "organization_logo": org_logo,
             "instructions": getattr(test_series, "instructions", None),
 
             "questions": [
