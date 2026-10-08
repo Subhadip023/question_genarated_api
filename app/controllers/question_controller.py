@@ -19,6 +19,10 @@ from app.schemas.question import (
     QuestionUpdate,
 )
 from app.models.topic import Topic
+from app.models.teacher_group import TeacherGroup
+from app.models.group_teacher import GroupTeacher
+from app.models.test_series import TestSeries
+from app.models.series_question import SeriesQuestion
 
 
 class QuestionCreatorHasNoOrganizationError(Exception):
@@ -333,7 +337,40 @@ class QuestionController:
             return query.filter(Question.organization_id.in_(organization_ids))
 
         if user_role == 2:
-            return query.filter(Question.user_id == user_id)
+            supervised_group_ids = (
+                select(TeacherGroup.id)
+                .filter(
+                    TeacherGroup.supervisor == user_id,
+                    TeacherGroup.is_deleted.is_(False),
+                )
+            )
+            member_group_ids = (
+                select(GroupTeacher.group_id)
+                .filter(
+                    GroupTeacher.teacher_id == user_id,
+                    GroupTeacher.is_deleted.is_(False),
+                )
+            )
+            group_series_ids = (
+                select(TestSeries.id)
+                .filter(
+                    or_(
+                        TestSeries.teacher_group_id.in_(supervised_group_ids),
+                        TestSeries.teacher_group_id.in_(member_group_ids),
+                        TestSeries.supervisor_id == user_id,
+                    )
+                )
+            )
+            group_question_ids = (
+                select(SeriesQuestion.question_id)
+                .filter(SeriesQuestion.series_id.in_(group_series_ids))
+            )
+            return query.filter(
+                or_(
+                    Question.user_id == user_id,
+                    Question.id.in_(group_question_ids),
+                )
+            )
 
         return query.filter(False)
 

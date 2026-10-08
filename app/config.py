@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     mysql_user: str = "root"
     mysql_password: str = ""
     mysql_database: str = ""
+    mysql_database_safalya: str = "safalya_db"
 
     # App
     app_env: str = "development"
@@ -44,6 +45,7 @@ class Settings(BaseSettings):
         env_file=".env",
         env_file_encoding="utf-8",
         case_sensitive=False,
+        extra="ignore",
     )
 
     @property
@@ -67,6 +69,29 @@ class Settings(BaseSettings):
             host=self.mysql_host,
             port=self.mysql_port,
             database=self.mysql_database,
+        )
+
+    @property
+    def database_url_safalya(self) -> str:
+        """Build MySQL connection URL for safalya database."""
+        from urllib.parse import quote_plus
+        encoded_password = quote_plus(self.mysql_password)
+        return (
+            f"mysql+pymysql://{self.mysql_user}:{encoded_password}"
+            f"@{self.mysql_host}:{self.mysql_port}/{self.mysql_database_safalya}"
+        )
+
+    @property
+    def database_url_safalya_object(self):
+        """Return a SQLAlchemy URL object for safalya database."""
+        from sqlalchemy.engine import URL
+        return URL.create(
+            drivername="mysql+pymysql",
+            username=self.mysql_user,
+            password=self.mysql_password,
+            host=self.mysql_host,
+            port=self.mysql_port,
+            database=self.mysql_database_safalya,
         )
 
 

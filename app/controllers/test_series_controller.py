@@ -969,7 +969,9 @@ class TestSeriesController:
             db.query(SeriesQuestion)
             .options(
                 joinedload(SeriesQuestion.question)
-                .joinedload(Question.options)
+                .joinedload(Question.options),
+                joinedload(SeriesQuestion.question)
+                .joinedload(Question.topic),
             )
             .filter(
                 SeriesQuestion.series_id == series_id
@@ -1013,6 +1015,9 @@ class TestSeriesController:
                 {
                     "question_id": item.question.id,
                     "question": item.question.question,
+                    "organization_id": item.question.organization_id,
+                    "user_id": item.question.user_id,
+                    "is_active": item.question.is_active,
                     "marks": (
                         float(item.marks)
                         if item.marks is not None
@@ -1023,12 +1028,23 @@ class TestSeriesController:
                         if item.negative_marks is not None
                         else None
                     ),
+                    "topic_id": item.question.topic_id,
+                    "topic": (
+                        {
+                            "id": item.question.topic.id,
+                            "name": item.question.topic.name,
+                            "color": item.question.topic.color,
+                        }
+                        if item.question.topic
+                        else None
+                    ),
                     "diagrams": q_diagrams_map.get(item.question.id, []),
                     "diagram_path": q_diagrams_map[item.question.id][-1]["path"] if q_diagrams_map.get(item.question.id) else None,
                     "options": [
                         {
                             "id": option.id,
                             "text": option.ans,
+                            "ans": option.ans,
                             "is_correct": option.is_correct,
                             "diagram_path": opt_diag_map.get(option.id)
                         }
