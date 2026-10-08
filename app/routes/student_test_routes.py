@@ -45,7 +45,7 @@ def list_public_tests(
     q: str | None = None,
     topic: str | None = None,
     org_id: int | None = None,
-    sort_order: str = "asc",
+    sort_order: str = "lifo",
     page: int = 1,
     limit: int = 10,
     access_type: str | None = None,

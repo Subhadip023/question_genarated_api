@@ -155,10 +155,16 @@ class StudentTestController:
                 )
             )
 
-        if sort_order == "desc":
+        if sort_order in ("lifo", "newest"):
+            query = query.order_by(TestSeries.id.desc())
+        elif sort_order in ("fifo", "oldest"):
+            query = query.order_by(TestSeries.id.asc())
+        elif sort_order in ("desc", "name_desc"):
             query = query.order_by(TestSeries.name.desc())
-        else:
+        elif sort_order in ("asc", "name_asc"):
             query = query.order_by(TestSeries.name.asc())
+        else:
+            query = query.order_by(TestSeries.id.desc())
 
         total = query.count()
         total_pages = math.ceil(total / limit) if limit > 0 else 1

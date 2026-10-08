@@ -2,6 +2,7 @@
 
 from datetime import datetime, timezone
 
+from sqlalchemy import or_
 from sqlalchemy.orm import Session, joinedload
 
 from app.models.group_teacher import GroupTeacher
@@ -186,7 +187,20 @@ class TeacherGroupController:
             query = query.filter(TeacherGroup.org_id == user_org_id)
 
         if user_role == 2:
-            query = query.filter(TeacherGroup.supervisor == user_id)
+            member_group_ids = (
+                db.query(GroupTeacher.group_id)
+                .filter(
+                    GroupTeacher.teacher_id == user_id,
+                    GroupTeacher.is_deleted.is_(False),
+                )
+                .subquery()
+            )
+            query = query.filter(
+                or_(
+                    TeacherGroup.supervisor == user_id,
+                    TeacherGroup.id.in_(member_group_ids),
+                )
+            )
 
         groups = query.order_by(TeacherGroup.id.desc()).all()
         return [cls._build_response(g, db) for g in groups]
