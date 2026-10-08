@@ -35,6 +35,7 @@ class TestSeriesCreate(BaseModel):
     is_active: bool = True
     is_result_show: bool = False
     is_score_show: bool = False
+    instructions: str | None = None
 
     @field_validator("valid_until")
     @classmethod
@@ -84,6 +85,7 @@ class TestSeriesResponse(BaseModel):
     valid_until: datetime
     duration_seconds: int
 
+    instructions: str | None = None
     is_active: bool
     is_result_show: bool
     is_score_show: bool
@@ -115,6 +117,7 @@ class TestSeriesUpdate(BaseModel):
 
     questions: list[SeriesQuestionInput] | None = None
 
+    instructions: str | None = None
     is_active: bool | None = None
     is_result_show: bool | None = None
     is_score_show: bool | None = None

@@ -2,7 +2,7 @@
 
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -30,6 +30,9 @@ class TestSeries(Base):
     created_by: Mapped[int] = mapped_column(
         Integer, ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
     )
+    instructions: Mapped[str | None] = mapped_column(
+        Text, nullable=True, default=None
+    )
     valid_until: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     duration_seconds: Mapped[int] = mapped_column(Integer, nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
@@ -50,18 +53,6 @@ class TestSeries(Base):
         back_populates="series",
         cascade="all, delete-orphan",
         order_by="SeriesQuestion.position",
-    )
-    
-    is_result_show: Mapped[bool] = mapped_column(
-        Boolean,
-        default=False,
-        nullable=False,
-    )
-
-    is_score_show: Mapped[bool] = mapped_column(
-        Boolean,
-        default=False,
-        nullable=False,
     )
 
     teacher_group_id: Mapped[int | None] = mapped_column(

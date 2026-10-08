@@ -21,6 +21,7 @@ class AvailableSeriesResponse(BaseModel):
     is_score_show: bool = False
     access_type: str = "public"
     is_private: bool = False
+    instructions: str | None = None
 
 
 class InviteInfoResponse(BaseModel):
@@ -35,6 +36,7 @@ class InviteInfoResponse(BaseModel):
     is_active: bool
     is_expired: bool
     access_type: str = "invite_only"
+    instructions: str | None = None
 
 
 class PaginatedAvailableSeriesResponse(BaseModel):
@@ -97,6 +99,7 @@ class AttemptResponse(BaseModel):
     is_result_show: bool = False
     is_score_show: bool = False
     result_file_key: str | None = None
+    instructions: str | None = None
     questions: list[AttemptQuestionResponse]
 
 

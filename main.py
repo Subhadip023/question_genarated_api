@@ -16,6 +16,15 @@ from app.database import Base, engine
 import app.models  # ensure models are registered
 Base.metadata.create_all(bind=engine)
 
+# Ensure newly added columns exist in existing tables
+try:
+    from sqlalchemy import text
+    with engine.connect() as conn:
+        conn.execute(text("ALTER TABLE test_series ADD COLUMN instructions LONGTEXT NULL;"))
+        conn.commit()
+except Exception:
+    pass
+
 from app.middleware.auth_middleware import AuthMiddleware
 from app.middleware.organization_permission_middleware import (
     OrganizationPermissionMiddleware,

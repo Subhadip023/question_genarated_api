@@ -172,6 +172,7 @@ class TestSeriesController:
             # Newly added columns
             teacher_group_id=data.teacher_group_id,
             supervisor_id=data.supervisor_id,
+            instructions=data.instructions,
 
             valid_until=data.valid_until,
             duration_seconds=data.duration_seconds,
@@ -413,7 +414,7 @@ class TestSeriesController:
         batch_id_val = updates.pop("batch_id", None) if has_batch_id_update else None
 
         for field, value in updates.items():
-            if field in ("teacher_group_id", "supervisor_id"):
+            if field in ("teacher_group_id", "supervisor_id", "instructions"):
                 setattr(series, field, value)
             elif value is not None:
                 setattr(series, field, value)
@@ -898,6 +899,7 @@ class TestSeriesController:
             student_ids=student_ids,
             valid_until=item.valid_until,
             duration_seconds=item.duration_seconds,
+            instructions=getattr(item, "instructions", None),
             is_active=item.is_active,
             is_result_show=bool(item.is_result_show),
             is_score_show=bool(item.is_score_show),
@@ -1010,6 +1012,7 @@ class TestSeriesController:
         return {
             "series_id": test_series.id,
             "series_name": test_series.name,
+            "instructions": getattr(test_series, "instructions", None),
 
             "questions": [
                 {

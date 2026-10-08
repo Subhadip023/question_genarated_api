@@ -204,6 +204,7 @@ class StudentTestController:
                     is_score_show=item.is_score_show,
                     access_type=item.access_type or "public",
                     is_private=(item.access_type == "private"),
+                    instructions=getattr(item, "instructions", None),
                 )
             )
 
