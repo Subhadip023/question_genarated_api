@@ -3,6 +3,7 @@ Question controller — handles request orchestration between route and model.
 This acts as the Controller (C) layer in MVC.
 """
 
+from datetime import datetime
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session, joinedload
 
@@ -222,6 +223,8 @@ class QuestionController:
         is_global: bool | None = None,
         organization_id: int | None = None,
         question_user_id: int | None = None,
+        start_date: datetime | None = None,
+        end_date: datetime | None = None,
     ) -> PaginatedQuestionResponse:
         """Fetch one page of questions visible to the authenticated user."""
         query = db.query(Question)
@@ -230,6 +233,10 @@ class QuestionController:
         )
         if topic_id is not None:
             query = query.filter(Question.topic_id == topic_id)
+        if start_date is not None:
+            query = query.filter(Question.created_at >= start_date)
+        if end_date is not None:
+            query = query.filter(Question.created_at <= end_date)
         if search and (term := search.strip()):
             search_filter = Question.question.ilike(f"%{term}%")
             if term.isdecimal():
