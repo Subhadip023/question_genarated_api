@@ -1,6 +1,8 @@
 """
 Utility module for generating physical question paper PDFs in A4 size.
 Uses ReportLab to build high-quality, printable exam papers.
+Supports 1-column or 2-column layouts, font sizing (compact/normal/large),
+and toggles for institute header, candidate box, instructions, and answer key.
 """
 
 import io
@@ -13,9 +15,15 @@ from reportlab.lib.pagesizes import A4
 from reportlab.lib import colors
 from reportlab.lib.units import mm
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT, TA_JUSTIFY
+from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
 from reportlab.platypus import (
     SimpleDocTemplate,
+    BaseDocTemplate,
+    PageTemplate,
+    Frame,
+    FrameBreak,
+    NextPageTemplate,
+    PageBreak,
     Paragraph,
     Spacer,
     Table,
@@ -50,8 +58,8 @@ class NumberedCanvas(canvas.Canvas):
         for state in self._saved_page_states:
             self.__dict__.update(state)
             self.draw_page_decorations(num_pages)
-            canvas.Canvas.showPage(self)
-        canvas.Canvas.save(self)
+            super().showPage()
+        super().save()
 
     def draw_page_decorations(self, page_count: int) -> None:
         self.saveState()
@@ -127,13 +135,11 @@ def get_scaled_image(path_str: str | None, max_w_mm: float, max_h_mm: float) -> 
     if not path_str:
         return None
 
-    # Try resolving path
     p = Path(path_str)
     if not p.is_file():
         cleaned_path = path_str.replace("uploads/", "").replace("uploads\\", "").lstrip("/\\")
         p = Path(settings.upload_dir) / cleaned_path
     if not p.is_file():
-        # Try relative to cwd
         p = Path("uploads") / path_str.replace("uploads/", "").replace("uploads\\", "").lstrip("/\\")
     if not p.is_file():
         return None
@@ -176,9 +182,15 @@ def generate_question_paper_pdf_bytes(
     series_questions: list[Any],
     organization: Any = None,
     include_answers: bool = False,
+    columns: int = 1,
+    font_size: str = "normal",
+    show_candidate_box: bool = True,
+    show_instructions: bool = True,
+    show_org_header: bool = True,
 ) -> bytes:
     """
     Builds and returns a complete, printable physical question paper in A4 PDF bytes.
+    Supports 1-column or 2-column layout, font size scaling, and header section toggles.
     """
     buffer = io.BytesIO()
 
@@ -186,25 +198,29 @@ def generate_question_paper_pdf_bytes(
     # Left & Right margins: 14mm each -> Usable width = 210 - 28 = 182mm
     margin = 14 * mm
     printable_width = A4[0] - (2 * margin)
+    usable_h = A4[1] - (2 * margin)
 
-    doc = SimpleDocTemplate(
-        buffer,
-        pagesize=A4,
-        leftMargin=margin,
-        rightMargin=margin,
-        topMargin=14 * mm,
-        bottomMargin=14 * mm,
-    )
+    # Validate columns
+    num_columns = 2 if int(columns or 1) == 2 else 1
+
+    # Font scale calculation
+    fs_mode = str(font_size or "normal").lower().strip()
+    if fs_mode == "compact":
+        font_scale = 0.88
+    elif fs_mode == "large":
+        font_scale = 1.15
+    else:
+        font_scale = 1.0
 
     styles = getSampleStyleSheet()
 
-    # Custom styles
+    # Dynamic styles based on font_scale
     org_title_style = ParagraphStyle(
         "OrgTitle",
         parent=styles["Normal"],
         fontName="Times-Bold",
-        fontSize=15,
-        leading=18,
+        fontSize=max(11.0, 15.0 * font_scale),
+        leading=max(14.0, 18.0 * font_scale),
         alignment=TA_CENTER,
         textColor=colors.black,
     )
@@ -212,8 +228,8 @@ def generate_question_paper_pdf_bytes(
         "SeriesTitle",
         parent=styles["Normal"],
         fontName="Times-Bold",
-        fontSize=13,
-        leading=16,
+        fontSize=max(10.0, 13.0 * font_scale),
+        leading=max(13.0, 16.0 * font_scale),
         alignment=TA_CENTER,
         textColor=colors.black,
     )
@@ -221,8 +237,8 @@ def generate_question_paper_pdf_bytes(
         "CopyBadge",
         parent=styles["Normal"],
         fontName="Times-Bold",
-        fontSize=9,
-        leading=11,
+        fontSize=max(8.0, 9.0 * font_scale),
+        leading=max(10.0, 11.0 * font_scale),
         alignment=TA_CENTER,
         textColor=colors.HexColor("#b30000"),
     )
@@ -230,17 +246,8 @@ def generate_question_paper_pdf_bytes(
         "MetaText",
         parent=styles["Normal"],
         fontName="Times-Roman",
-        fontSize=9,
-        leading=11,
-        alignment=TA_CENTER,
-        textColor=colors.black,
-    )
-    meta_bold_style = ParagraphStyle(
-        "MetaBold",
-        parent=styles["Normal"],
-        fontName="Times-Bold",
-        fontSize=9,
-        leading=11,
+        fontSize=max(7.5, 9.0 * font_scale),
+        leading=max(9.5, 11.0 * font_scale),
         alignment=TA_CENTER,
         textColor=colors.black,
     )
@@ -248,49 +255,41 @@ def generate_question_paper_pdf_bytes(
         "CandidateField",
         parent=styles["Normal"],
         fontName="Times-Roman",
-        fontSize=8.5,
-        leading=11,
+        fontSize=max(7.5, 8.5 * font_scale),
+        leading=max(9.5, 11.0 * font_scale),
         textColor=colors.black,
     )
     inst_header_style = ParagraphStyle(
         "InstHeader",
         parent=styles["Normal"],
         fontName="Times-Bold",
-        fontSize=9,
-        leading=12,
+        fontSize=max(8.0, 9.0 * font_scale),
+        leading=max(10.0, 12.0 * font_scale),
         textColor=colors.black,
     )
     inst_body_style = ParagraphStyle(
         "InstBody",
         parent=styles["Normal"],
         fontName="Times-Roman",
-        fontSize=8,
-        leading=10.5,
+        fontSize=max(7.0, 8.0 * font_scale),
+        leading=max(9.0, 10.5 * font_scale),
         alignment=TA_LEFT,
-        textColor=colors.black,
-    )
-    q_num_style = ParagraphStyle(
-        "QuestionNum",
-        parent=styles["Normal"],
-        fontName="Times-Bold",
-        fontSize=10,
-        leading=13,
         textColor=colors.black,
     )
     q_text_style = ParagraphStyle(
         "QuestionText",
         parent=styles["Normal"],
         fontName="Times-Roman",
-        fontSize=9.5,
-        leading=13,
+        fontSize=max(8.0, 9.5 * font_scale),
+        leading=max(11.0, 13.0 * font_scale),
         textColor=colors.black,
     )
     q_marks_style = ParagraphStyle(
         "QuestionMarks",
         parent=styles["Normal"],
         fontName="Helvetica-Bold",
-        fontSize=8,
-        leading=10,
+        fontSize=max(7.0, 8.0 * font_scale),
+        leading=max(9.0, 10.0 * font_scale),
         alignment=TA_RIGHT,
         textColor=colors.HexColor("#333333"),
     )
@@ -298,66 +297,67 @@ def generate_question_paper_pdf_bytes(
         "OptLabel",
         parent=styles["Normal"],
         fontName="Times-Bold",
-        fontSize=9,
-        leading=12,
+        fontSize=max(7.5, 9.0 * font_scale),
+        leading=max(10.0, 12.0 * font_scale),
         textColor=colors.black,
     )
     opt_text_style = ParagraphStyle(
         "OptText",
         parent=styles["Normal"],
         fontName="Times-Roman",
-        fontSize=8.5,
-        leading=11.5,
+        fontSize=max(7.0, 8.5 * font_scale),
+        leading=max(9.5, 11.5 * font_scale),
         textColor=colors.black,
     )
     opt_correct_style = ParagraphStyle(
         "OptCorrectText",
         parent=styles["Normal"],
         fontName="Times-Bold",
-        fontSize=8.5,
-        leading=11.5,
+        fontSize=max(7.0, 8.5 * font_scale),
+        leading=max(9.5, 11.5 * font_scale),
         textColor=colors.HexColor("#006622"),
     )
     table_cell_style = ParagraphStyle(
         "TableCell",
         parent=styles["Normal"],
         fontName="Times-Roman",
-        fontSize=8,
-        leading=10,
+        fontSize=max(7.0, 8.0 * font_scale),
+        leading=max(9.0, 10.0 * font_scale),
         alignment=TA_CENTER,
     )
     table_bold_style = ParagraphStyle(
         "TableBold",
         parent=styles["Normal"],
         fontName="Times-Bold",
-        fontSize=8.5,
-        leading=10,
+        fontSize=max(7.5, 8.5 * font_scale),
+        leading=max(9.0, 10.0 * font_scale),
         alignment=TA_CENTER,
     )
 
-    story: list[Any] = []
+    header_flowables: list[Any] = []
 
     # ── 1. Organization Logo & Header ──
-    if organization and getattr(organization, "logo", None):
-        logo_img = get_scaled_image(organization.logo, max_w_mm=45, max_h_mm=16)
-        if logo_img:
-            logo_img.hAlign = "CENTER"
-            story.append(logo_img)
-            story.append(Spacer(1, 2 * mm))
+    if show_org_header:
+        if organization and getattr(organization, "logo", None):
+            logo_img = get_scaled_image(organization.logo, max_w_mm=45, max_h_mm=16)
+            if logo_img:
+                logo_img.hAlign = "CENTER"
+                header_flowables.append(logo_img)
+                header_flowables.append(Spacer(1, 2 * mm))
 
-    if organization and getattr(organization, "name", None):
-        story.append(Paragraph(str(organization.name).upper(), org_title_style))
-        story.append(Spacer(1, 1 * mm))
+        if organization and getattr(organization, "name", None):
+            header_flowables.append(Paragraph(str(organization.name).upper(), org_title_style))
+            header_flowables.append(Spacer(1, 1 * mm))
 
     series_name = getattr(test_series, "name", "Examination")
-    story.append(Paragraph(series_name.upper(), series_title_style))
+    header_flowables.append(Paragraph(series_name.upper(), series_title_style))
 
     if include_answers:
-        story.append(Spacer(1, 1 * mm))
-        story.append(Paragraph("[ TEACHER EVALUATION COPY — WITH ANSWER KEY ]", copy_badge_style))
+        header_flowables.append(Spacer(1, 1 * mm))
+        header_flowables.append(Paragraph("[ TEACHER EVALUATION COPY — WITH ANSWER KEY ]", copy_badge_style))
 
-    story.append(Spacer(1, 2.5 * mm))
-    story.append(HRFlowable(width="100%", thickness=1.2, color=colors.black, spaceAfter=2.5 * mm))
+    header_flowables.append(Spacer(1, 2.5 * mm))
+    header_flowables.append(HRFlowable(width="100%", thickness=1.2, color=colors.black, spaceAfter=2.5 * mm))
 
     # ── 2. Exam Metadata Table ──
     total_marks = 0
@@ -403,75 +403,83 @@ def generate_question_paper_pdf_bytes(
             ]
         )
     )
-    story.append(meta_table)
-    story.append(Spacer(1, 2.5 * mm))
+    header_flowables.append(meta_table)
+    header_flowables.append(Spacer(1, 2.5 * mm))
 
     # ── 3. Candidate Fill-in Details Box ──
-    half_w = printable_width / 2.0
-    candidate_table = Table(
-        [
+    if show_candidate_box:
+        half_w = printable_width / 2.0
+        candidate_table = Table(
             [
-                Paragraph("<b>Candidate Name:</b> ___________________________", candidate_style),
-                Paragraph("<b>Roll / Reg. No:</b> _____________________", candidate_style),
+                [
+                    Paragraph("<b>Candidate Name:</b> ___________________________", candidate_style),
+                    Paragraph("<b>Roll / Reg. No:</b> _____________________", candidate_style),
+                ],
+                [
+                    Paragraph("<b>Batch / Section:</b> __________________________", candidate_style),
+                    Paragraph("<b>Date of Exam:</b> _____________________", candidate_style),
+                ],
+                [
+                    Paragraph("<b>Candidate Signature:</b> ____________________", candidate_style),
+                    Paragraph("<b>Invigilator Sign:</b> _____________________", candidate_style),
+                ],
             ],
-            [
-                Paragraph("<b>Batch / Section:</b> __________________________", candidate_style),
-                Paragraph("<b>Date of Exam:</b> _____________________", candidate_style),
-            ],
-            [
-                Paragraph("<b>Candidate Signature:</b> ____________________", candidate_style),
-                Paragraph("<b>Invigilator Sign:</b> _____________________", candidate_style),
-            ],
-        ],
-        colWidths=[half_w, half_w],
-    )
-    candidate_table.setStyle(
-        TableStyle(
-            [
-                ("BOX", (0, 0), (-1, -1), 0.8, colors.black),
-                ("TOPPADDING", (0, 0), (-1, -1), 1.5 * mm),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 1.5 * mm),
-                ("LEFTPADDING", (0, 0), (-1, -1), 3 * mm),
-                ("RIGHTPADDING", (0, 0), (-1, -1), 3 * mm),
-                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-            ]
+            colWidths=[half_w, half_w],
         )
-    )
-    story.append(candidate_table)
-    story.append(Spacer(1, 2.5 * mm))
+        candidate_table.setStyle(
+            TableStyle(
+                [
+                    ("BOX", (0, 0), (-1, -1), 0.8, colors.black),
+                    ("TOPPADDING", (0, 0), (-1, -1), 1.5 * mm),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 1.5 * mm),
+                    ("LEFTPADDING", (0, 0), (-1, -1), 3 * mm),
+                    ("RIGHTPADDING", (0, 0), (-1, -1), 3 * mm),
+                    ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ]
+            )
+        )
+        header_flowables.append(candidate_table)
+        header_flowables.append(Spacer(1, 2.5 * mm))
 
     # ── 4. General Instructions Section ──
-    instructions_text = getattr(test_series, "instructions", None)
-    if not instructions_text:
-        instructions_text = (
-            "1. This paper contains objective multiple choice questions. All questions are compulsory.<br/>"
-            "2. Each question has four alternative choices (A, B, C, D). Mark the single most correct response.<br/>"
-            "3. Do not write anything on the question paper except your details in the designated box.<br/>"
-            "4. Electronic gadgets, mobile phones, and calculators are strictly prohibited."
-        )
+    if show_instructions:
+        instructions_text = getattr(test_series, "instructions", None)
+        if not instructions_text:
+            instructions_text = (
+                "1. This paper contains objective multiple choice questions. All questions are compulsory.<br/>"
+                "2. Each question has four alternative choices (A, B, C, D). Mark the single most correct response.<br/>"
+                "3. Do not write anything on the question paper except your details in the designated box.<br/>"
+                "4. Electronic gadgets, mobile phones, and calculators are strictly prohibited."
+            )
 
-    inst_flowables = [
-        Paragraph("<b>GENERAL INSTRUCTIONS:</b>", inst_header_style),
-        Spacer(1, 1 * mm),
-        safe_paragraph(instructions_text, inst_body_style),
-    ]
-    inst_table = Table([[inst_flowables]], colWidths=[printable_width])
-    inst_table.setStyle(
-        TableStyle(
-            [
-                ("BOX", (0, 0), (-1, -1), 0.6, colors.black),
-                ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#fafafa")),
-                ("TOPPADDING", (0, 0), (-1, -1), 2 * mm),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 2 * mm),
-                ("LEFTPADDING", (0, 0), (-1, -1), 3 * mm),
-                ("RIGHTPADDING", (0, 0), (-1, -1), 3 * mm),
-            ]
+        inst_flowables = [
+            Paragraph("<b>GENERAL INSTRUCTIONS:</b>", inst_header_style),
+            Spacer(1, 1 * mm),
+            safe_paragraph(instructions_text, inst_body_style),
+        ]
+        inst_table = Table([[inst_flowables]], colWidths=[printable_width])
+        inst_table.setStyle(
+            TableStyle(
+                [
+                    ("BOX", (0, 0), (-1, -1), 0.6, colors.black),
+                    ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#fafafa")),
+                    ("TOPPADDING", (0, 0), (-1, -1), 2 * mm),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 2 * mm),
+                    ("LEFTPADDING", (0, 0), (-1, -1), 3 * mm),
+                    ("RIGHTPADDING", (0, 0), (-1, -1), 3 * mm),
+                ]
+            )
         )
-    )
-    story.append(inst_table)
-    story.append(Spacer(1, 4 * mm))
+        header_flowables.append(inst_table)
+        header_flowables.append(Spacer(1, 3.5 * mm))
 
-    # ── 5. Questions Section ──
+    # Column dimensions for questions
+    gutter = 6 * mm
+    col_w = (printable_width - gutter) / 2.0 if num_columns == 2 else printable_width
+    q_content_width = col_w
+
+    # ── 5. Questions Section Flowables ──
+    question_flowables: list[Any] = []
     answer_key_matrix: list[tuple[int, str]] = []
 
     for idx, sq in enumerate(series_questions):
@@ -504,9 +512,10 @@ def generate_question_paper_pdf_bytes(
         q_p = safe_paragraph(f"<b>Q.{idx + 1}.</b> {q_text}", q_text_style)
         marks_p = Paragraph(q_marks_str, q_marks_style)
 
+        marks_col_w = 16 * mm if num_columns == 2 else 24 * mm
         header_table = Table(
             [[q_p, marks_p]],
-            colWidths=[printable_width - 24 * mm, 24 * mm],
+            colWidths=[q_content_width - marks_col_w, marks_col_w],
         )
         header_table.setStyle(
             TableStyle(
@@ -532,7 +541,9 @@ def generate_question_paper_pdf_bytes(
                 diagram_paths.append(q_obj.diagram_path)
 
         for d_path in diagram_paths:
-            d_img = get_scaled_image(d_path, max_w_mm=120, max_h_mm=45)
+            diag_max_w = min(75.0, (q_content_width / mm) - 4.0) if num_columns == 2 else 120.0
+            diag_max_h = 38.0 if num_columns == 2 else 45.0
+            d_img = get_scaled_image(d_path, max_w_mm=diag_max_w, max_h_mm=diag_max_h)
             if d_img:
                 d_img.hAlign = "CENTER"
                 q_flowables.append(Spacer(1, 1.5 * mm))
@@ -566,15 +577,18 @@ def generate_question_paper_pdf_bytes(
                 # Option Diagram if any
                 opt_diag_path = getattr(opt, "diagram_path", None)
                 if opt_diag_path:
-                    opt_diag_img = get_scaled_image(opt_diag_path, max_w_mm=50, max_h_mm=22)
+                    opt_diag_max_w = min(45.0, (q_content_width / mm) - 12.0) if num_columns == 2 else 50.0
+                    opt_diag_max_h = 20.0 if num_columns == 2 else 22.0
+                    opt_diag_img = get_scaled_image(opt_diag_path, max_w_mm=opt_diag_max_w, max_h_mm=opt_diag_max_h)
                     if opt_diag_img:
                         cell_flowables.append(opt_diag_img)
 
                 option_rows.append([label_p, cell_flowables])
 
+            opt_label_w = 7 * mm if num_columns == 2 else 10 * mm
             opt_table = Table(
                 option_rows,
-                colWidths=[10 * mm, printable_width - 12 * mm],
+                colWidths=[opt_label_w, q_content_width - (opt_label_w + 2 * mm)],
             )
             opt_table.setStyle(
                 TableStyle(
@@ -594,20 +608,18 @@ def generate_question_paper_pdf_bytes(
         q_flowables.append(Spacer(1, 1.5 * mm))
         q_flowables.append(HRFlowable(width="100%", thickness=0.4, color=colors.HexColor("#dddddd"), spaceAfter=2.5 * mm))
 
-        # Keep question together on a single page if it fits
-        story.append(KeepTogether(q_flowables))
+        # Keep question together on a single page if reasonable size
+        question_flowables.append(KeepTogether(q_flowables))
 
     # ── 6. Answer Key Matrix Table (If include_answers is True) ──
+    key_flowables: list[Any] = []
     if include_answers and answer_key_matrix:
-        key_flowables: list[Any] = [
-            Spacer(1, 4 * mm),
-            Paragraph("<b>COMPLETE ANSWER KEY MATRIX</b>", inst_header_style),
-            Spacer(1, 2 * mm),
-        ]
+        key_flowables.append(Spacer(1, 4 * mm))
+        key_flowables.append(Paragraph("<b>COMPLETE ANSWER KEY MATRIX</b>", inst_header_style))
+        key_flowables.append(Spacer(1, 2 * mm))
 
-        # Break into 10 columns per row
-        cols_per_row = 10
-        cell_w = printable_width / float(cols_per_row)
+        cols_per_row = 5 if num_columns == 2 else 10
+        cell_w = q_content_width / float(cols_per_row)
         table_data: list[list[Any]] = []
 
         for row_start in range(0, len(answer_key_matrix), cols_per_row):
@@ -619,7 +631,6 @@ def generate_question_paper_pdf_bytes(
                 header_row.append(Paragraph(f"Q.{q_num}", table_cell_style))
                 ans_row.append(Paragraph(f"<b>{ans_val}</b>", table_bold_style))
 
-            # Pad remaining empty cells if last row has fewer items
             while len(header_row) < cols_per_row:
                 header_row.append(Paragraph("-", table_cell_style))
                 ans_row.append(Paragraph("-", table_cell_style))
@@ -642,36 +653,202 @@ def generate_question_paper_pdf_bytes(
             )
         )
         key_flowables.append(ans_table)
-        story.append(KeepTogether(key_flowables))
 
     # ── 7. End of Question Paper & Rough Work ──
     end_flowables = [
         Spacer(1, 4 * mm),
-        Paragraph("<b>*** END OF QUESTION PAPER ***</b>", ParagraphStyle(
-            "EndNotice",
-            parent=styles["Normal"],
-            fontName="Times-Bold",
-            fontSize=9,
-            alignment=TA_CENTER,
-            textColor=colors.black,
-        )),
-        Spacer(1, 6 * mm),
+        Paragraph(
+            "<b>*** END OF QUESTION PAPER ***</b>",
+            ParagraphStyle(
+                "EndNotice",
+                parent=styles["Normal"],
+                fontName="Times-Bold",
+                fontSize=max(7.5, 9.0 * font_scale),
+                alignment=TA_CENTER,
+                textColor=colors.black,
+            ),
+        ),
+        Spacer(1, 5 * mm),
         HRFlowable(width="100%", thickness=0.8, color=colors.HexColor("#999999"), dash=(3, 3)),
         Spacer(1, 1.5 * mm),
-        Paragraph("SPACE FOR ROUGH WORK", ParagraphStyle(
-            "RoughWork",
-            parent=styles["Normal"],
-            fontName="Helvetica-Bold",
-            fontSize=7.5,
-            alignment=TA_CENTER,
-            textColor=colors.HexColor("#888888"),
-        )),
+        Paragraph(
+            "SPACE FOR ROUGH WORK",
+            ParagraphStyle(
+                "RoughWork",
+                parent=styles["Normal"],
+                fontName="Helvetica-Bold",
+                fontSize=max(6.5, 7.5 * font_scale),
+                alignment=TA_CENTER,
+                textColor=colors.HexColor("#888888"),
+            ),
+        ),
     ]
-    story.append(KeepTogether(end_flowables))
 
-    # Build the document using the NumberedCanvas
-    canvas_factory = lambda *args, **kwargs: NumberedCanvas(*args, **kwargs)  # noqa: E731
-    doc.build(story, canvasmaker=canvas_factory)
+    # Canvas factory for NumberedCanvas
+    def canvas_factory(*args: Any, **kwargs: Any) -> NumberedCanvas:
+        c = NumberedCanvas(*args, **kwargs)
+        c.series_title = getattr(test_series, "name", "")
+        return c
+
+    # ── 8. Assemble Document (1 Column vs 2 Column) ──
+    if num_columns == 1:
+        doc = SimpleDocTemplate(
+            buffer,
+            pagesize=A4,
+            leftMargin=margin,
+            rightMargin=margin,
+            topMargin=margin,
+            bottomMargin=margin,
+        )
+        story: list[Any] = []
+        story.extend(header_flowables)
+        story.extend(question_flowables)
+        if key_flowables:
+            story.append(KeepTogether(key_flowables))
+        story.append(KeepTogether(end_flowables))
+        doc.build(story, canvasmaker=canvas_factory)
+
+    else:
+        # 2-column layout with BaseDocTemplate and PageTemplates
+        divider_x = margin + col_w + (gutter / 2.0)
+
+        # Later pages (Page 2+) have full-height 2-column frames
+        later_col1 = Frame(
+            margin,
+            margin,
+            col_w,
+            usable_h,
+            id="later_col1",
+            leftPadding=0,
+            rightPadding=0,
+            topPadding=0,
+            bottomPadding=0,
+        )
+        later_col2 = Frame(
+            margin + col_w + gutter,
+            margin,
+            col_w,
+            usable_h,
+            id="later_col2",
+            leftPadding=0,
+            rightPadding=0,
+            topPadding=0,
+            bottomPadding=0,
+        )
+
+        def on_later_page(c: canvas.Canvas, _doc: Any) -> None:
+            c.saveState()
+            c.setStrokeColor(colors.HexColor("#dddddd"))
+            c.setLineWidth(0.5)
+            c.line(divider_x, margin, divider_x, margin + usable_h)
+            c.restoreState()
+
+        later_template = PageTemplate(id="LaterPages", frames=[later_col1, later_col2], onPage=on_later_page)
+
+        # Measure height of header block to fit on Page 1
+        header_h = 0.0
+        for it in header_flowables:
+            try:
+                _, h_val = it.wrap(printable_width, usable_h)
+                header_h += h_val
+            except Exception:
+                pass
+        header_h += 3 * mm
+
+        doc = BaseDocTemplate(
+            buffer,
+            pagesize=A4,
+            leftMargin=margin,
+            rightMargin=margin,
+            topMargin=margin,
+            bottomMargin=margin,
+        )
+
+        if header_flowables and header_h < (usable_h - 40 * mm):
+            # Page 1 top frame for header, and bottom 2 columns for starting questions
+            p1_col_h = usable_h - header_h - 2 * mm
+            top_frame = Frame(
+                margin,
+                margin + usable_h - header_h,
+                printable_width,
+                header_h,
+                id="top_frame",
+                leftPadding=0,
+                rightPadding=0,
+                topPadding=0,
+                bottomPadding=0,
+            )
+            p1_col1 = Frame(
+                margin,
+                margin,
+                col_w,
+                p1_col_h,
+                id="p1_col1",
+                leftPadding=0,
+                rightPadding=0,
+                topPadding=0,
+                bottomPadding=0,
+            )
+            p1_col2 = Frame(
+                margin + col_w + gutter,
+                margin,
+                col_w,
+                p1_col_h,
+                id="p1_col2",
+                leftPadding=0,
+                rightPadding=0,
+                topPadding=0,
+                bottomPadding=0,
+            )
+
+            def on_p1_page(c: canvas.Canvas, _doc: Any) -> None:
+                c.saveState()
+                c.setStrokeColor(colors.HexColor("#dddddd"))
+                c.setLineWidth(0.5)
+                c.line(divider_x, margin, divider_x, margin + p1_col_h)
+                c.restoreState()
+
+            p1_template = PageTemplate(id="FirstPage", frames=[top_frame, p1_col1, p1_col2], onPage=on_p1_page)
+            doc.addPageTemplates([p1_template, later_template])
+
+            story = [
+                NextPageTemplate("LaterPages"),
+                *header_flowables,
+                FrameBreak(),
+                *question_flowables,
+            ]
+        elif header_flowables:
+            # Header is very large: Page 1 holds full-width header, Page 2+ holds 2 columns
+            p1_full_frame = Frame(
+                margin,
+                margin,
+                printable_width,
+                usable_h,
+                id="p1_full_frame",
+                leftPadding=0,
+                rightPadding=0,
+                topPadding=0,
+                bottomPadding=0,
+            )
+            p1_template = PageTemplate(id="FirstPage", frames=[p1_full_frame])
+            doc.addPageTemplates([p1_template, later_template])
+
+            story = [
+                NextPageTemplate("LaterPages"),
+                *header_flowables,
+                PageBreak(),
+                *question_flowables,
+            ]
+        else:
+            # No header flowables
+            doc.addPageTemplates([later_template])
+            story = list(question_flowables)
+
+        if key_flowables:
+            story.append(KeepTogether(key_flowables))
+        story.append(KeepTogether(end_flowables))
+
+        doc.build(story, canvasmaker=canvas_factory)
 
     pdf_bytes = buffer.getvalue()
     buffer.close()

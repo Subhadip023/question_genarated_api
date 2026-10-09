@@ -1160,6 +1160,11 @@ class TestSeriesController:
         user_role: int,
         db: Session,
         include_answers: bool = False,
+        columns: int = 1,
+        font_size: str = "normal",
+        show_candidate_box: bool = True,
+        show_instructions: bool = True,
+        show_org_header: bool = True,
     ) -> tuple[bytes | None, str]:
         if user_role == 3:
             raise TestSeriesPermissionError("Students cannot view question paper generator")
@@ -1198,10 +1203,20 @@ class TestSeriesController:
             series_questions=series_questions,
             organization=org,
             include_answers=include_answers,
+            columns=columns,
+            font_size=font_size,
+            show_candidate_box=show_candidate_box,
+            show_instructions=show_instructions,
+            show_org_header=show_org_header,
         )
 
         clean_title = re.sub(r"[^a-zA-Z0-9_\-]", "_", test_series.name or "test_series").strip("_")
-        suffix = "_with_answers" if include_answers else ""
+        suffix_parts = []
+        if columns == 2:
+            suffix_parts.append("2col")
+        if include_answers:
+            suffix_parts.append("with_answers")
+        suffix = f"_{'_'.join(suffix_parts)}" if suffix_parts else ""
         filename = f"{clean_title}{suffix}_question_paper.pdf"
         return pdf_bytes, filename
 

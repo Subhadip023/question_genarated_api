@@ -162,15 +162,37 @@ def get_test_series_question_paper_pdf(
     series_id: int,
     request: Request,
     include_answers: bool = False,
+    show_answer_key: bool | None = None,
+    columns: int = 1,
+    font_size: str = "normal",
+    fontSize: str | None = None,
+    show_candidate_box: bool = True,
+    showCandidateBox: bool | None = None,
+    show_instructions: bool = True,
+    showInstructions: bool | None = None,
+    show_org_header: bool = True,
+    showOrgHeader: bool | None = None,
     db: Session = Depends(get_db),
 ):
     try:
+        final_include_answers = show_answer_key if show_answer_key is not None else include_answers
+        final_font_size = fontSize if fontSize is not None else font_size
+        final_show_candidate_box = showCandidateBox if showCandidateBox is not None else show_candidate_box
+        final_show_instructions = showInstructions if showInstructions is not None else show_instructions
+        final_show_org_header = showOrgHeader if showOrgHeader is not None else show_org_header
+        final_columns = 2 if int(columns or 1) == 2 else 1
+
         pdf_bytes, filename = TestSeriesController.generate_question_paper_pdf(
             series_id=series_id,
             user_id=request.state.user_id,
             user_role=request.state.user_role,
             db=db,
-            include_answers=include_answers,
+            include_answers=final_include_answers,
+            columns=final_columns,
+            font_size=final_font_size,
+            show_candidate_box=final_show_candidate_box,
+            show_instructions=final_show_instructions,
+            show_org_header=final_show_org_header,
         )
 
         if not pdf_bytes:
