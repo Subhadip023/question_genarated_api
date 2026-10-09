@@ -14,3 +14,5 @@ class QuestionSetQuestion(Base):
     set_id = Column(Integer, ForeignKey("question_sets.id"))
 
     question_id = Column(Integer, ForeignKey("questions.id"))
+
+    question = relationship("Question")

@@ -3,9 +3,25 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 
-from app.schemas.question_set import QuestionSetCreate, QuestionSetUpdate, AddQuestionsRequest
+from app.schemas.question_set import (
+    QuestionSetCreate,
+    QuestionSetUpdate,
+    AddQuestionsRequest,
+    ConvertToTestSeriesRequest,
+)
 
-from app.controllers.question_set_controller import create_question_set, get_question_sets, get_question_set, update_question_set, delete_question_set, add_questions_to_set, remove_question_from_set, copy_question_set, get_question_sets_by_org
+from app.controllers.question_set_controller import (
+    create_question_set,
+    get_question_sets,
+    get_question_set,
+    update_question_set,
+    delete_question_set,
+    add_questions_to_set,
+    remove_question_from_set,
+    copy_question_set,
+    get_question_sets_by_org,
+    convert_to_test_series,
+)
 
 from app.dependencies.auth import get_current_user
 
@@ -131,3 +147,18 @@ def get_org_question_sets(
         org_id,
         current_user
     )
+
+
+@router.post("/{id}/convert-to-test-series")
+def convert_set_to_test_series(
+    id: int,
+    data: ConvertToTestSeriesRequest,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user)
+):
+    return convert_to_test_series(
+        db,
+        id,
+        data,
+        current_user
+    )
