@@ -1,6 +1,6 @@
 """Authenticated test-series management routes."""
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status, UploadFile, File
 from sqlalchemy.orm import Session
 
 from app.controllers.test_series_controller import (
@@ -149,6 +149,44 @@ def get_test_series_questions(
             )
 
         return result
+
+    except TestSeriesPermissionError as exc:
+        raise HTTPException(
+            status_code=403,
+            detail=str(exc)
+        ) from None
+
+
+@router.get("/{series_id}/question-paper-pdf")
+def get_test_series_question_paper_pdf(
+    series_id: int,
+    request: Request,
+    include_answers: bool = False,
+    db: Session = Depends(get_db),
+):
+    try:
+        pdf_bytes, filename = TestSeriesController.generate_question_paper_pdf(
+            series_id=series_id,
+            user_id=request.state.user_id,
+            user_role=request.state.user_role,
+            db=db,
+            include_answers=include_answers,
+        )
+
+        if not pdf_bytes:
+            raise HTTPException(
+                status_code=404,
+                detail="Test series not found"
+            )
+
+        return Response(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": f'inline; filename="{filename}"',
+                "Content-Type": "application/pdf",
+            },
+        )
 
     except TestSeriesPermissionError as exc:
         raise HTTPException(

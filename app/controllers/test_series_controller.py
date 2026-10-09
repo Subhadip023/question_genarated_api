@@ -4,6 +4,7 @@ from collections import defaultdict
 import secrets
 import hashlib
 import math
+import re
 from datetime import datetime
 from pathlib import Path
 
@@ -28,6 +29,7 @@ from app.models.test_access import TestAccess
 from app.models.test_series import TestSeries
 from app.models.answer_key import AnswerKey
 from app.models.user import User
+from app.utils.question_paper_pdf import generate_question_paper_pdf_bytes
 from app.schemas.test_series import (
     TestSeriesCreate,
     TestSeriesResponse,
@@ -1150,5 +1152,57 @@ class TestSeriesController:
             page_size=limit,
             total_pages=total_pages,
         )
+
+    @staticmethod
+    def generate_question_paper_pdf(
+        series_id: int,
+        user_id: int,
+        user_role: int,
+        db: Session,
+        include_answers: bool = False,
+    ) -> tuple[bytes | None, str]:
+        if user_role == 3:
+            raise TestSeriesPermissionError("Students cannot view question paper generator")
+
+        test_series = db.query(TestSeries).filter(TestSeries.id == series_id).first()
+        if not test_series:
+            return None, ""
+
+        if user_role in (1, 2):
+            membership = (
+                db.query(OrganizationUser)
+                .filter(OrganizationUser.user_id == user_id)
+                .order_by(OrganizationUser.org_id)
+                .first()
+            )
+            if not membership or membership.org_id != test_series.org_id:
+                raise TestSeriesPermissionError("You do not have permission to view this test series")
+
+        series_questions = (
+            db.query(SeriesQuestion)
+            .options(
+                joinedload(SeriesQuestion.question).joinedload(Question.options),
+                joinedload(SeriesQuestion.question).joinedload(Question.topic),
+            )
+            .filter(SeriesQuestion.series_id == series_id)
+            .order_by(SeriesQuestion.position)
+            .all()
+        )
+
+        org = None
+        if test_series.org_id:
+            org = db.query(Organization).filter(Organization.id == test_series.org_id).first()
+
+        pdf_bytes = generate_question_paper_pdf_bytes(
+            test_series=test_series,
+            series_questions=series_questions,
+            organization=org,
+            include_answers=include_answers,
+        )
+
+        clean_title = re.sub(r"[^a-zA-Z0-9_\-]", "_", test_series.name or "test_series").strip("_")
+        suffix = "_with_answers" if include_answers else ""
+        filename = f"{clean_title}{suffix}_question_paper.pdf"
+        return pdf_bytes, filename
 
 
