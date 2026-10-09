@@ -14,6 +14,7 @@ from app.models.topic import Topic
 from app.models.user import User
 from app.models.batch import Batch
 from app.models.batch_student import BatchStudent
+from app.models.notification import Notification
 
 __all__ = [
     "Diagram",
@@ -28,5 +29,6 @@ __all__ = [
     "TestSeries",
     "Topic",
     "User",
+    "Notification",
 ]
 

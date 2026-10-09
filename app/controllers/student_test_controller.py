@@ -530,6 +530,18 @@ class StudentTestController:
             else:
                 attempt.status = AttemptStatus.SUBMITTED
             db.commit()
+
+            # If the exam results are already published, notify the student
+            series = db.query(TestSeries).filter(TestSeries.id == attempt.series_id).first()
+            if series and getattr(series, "is_result_show", False):
+                from app.controllers.notification_controller import NotificationController
+                NotificationController.notify_exam_result(
+                    user_id=attempt.user_id,
+                    series_id=series.id,
+                    series_name=series.name,
+                    attempt_id=attempt.id,
+                    db=db,
+                )
         except Exception:
             db.rollback()
             raise

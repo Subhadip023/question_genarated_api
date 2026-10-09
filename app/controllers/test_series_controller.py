@@ -302,6 +302,7 @@ class TestSeriesController:
         if not is_authorized:
             raise TestSeriesPermissionError("You do not have permission to edit this test series")
 
+        was_result_show = bool(series.is_result_show)
         updates = data.model_dump(exclude_unset=True)
 
         # Enforce role-based edit restrictions
@@ -501,6 +502,13 @@ class TestSeriesController:
 
         try:
             db.commit()
+            if series.is_result_show and not was_result_show:
+                from app.controllers.notification_controller import NotificationController
+                NotificationController.notify_all_students_for_series(
+                    series_id=series.id,
+                    series_name=series.name,
+                    db=db,
+                )
         except Exception:
             db.rollback()
             raise

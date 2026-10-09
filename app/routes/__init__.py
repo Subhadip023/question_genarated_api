@@ -13,6 +13,7 @@ from app.routes import (
     test_series_routes,
     topic_routes,
     user_routes,
+    notification_routes,
 )
 
 __all__ = [
@@ -28,5 +29,6 @@ __all__ = [
     "test_series_routes",
     "topic_routes",
     "user_routes",
+    "notification_routes",
 ]
 

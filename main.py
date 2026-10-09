@@ -43,6 +43,7 @@ from app.routes import (
     test_series_routes,
     topic_routes,
     user_routes,
+    notification_routes,
 )
 from app.routes.student_batch import router as student_batch_router
 from app.routes.answer_key_routes import router as answer_key_router
@@ -97,6 +98,7 @@ app.include_router(organization_routes.router)
 app.include_router(diagram_routes.router)
 app.include_router(student_batch_router)
 app.include_router(answer_key_router)
+app.include_router(notification_routes.router)
 
 
 
