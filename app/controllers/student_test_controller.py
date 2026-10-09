@@ -932,6 +932,12 @@ class StudentTestController:
                     "Teacher is not assigned to any organization"
                 )
 
+        elif user_role == 3:
+            if student_id != user_id:
+                raise StudentTestPermissionError(
+                    "Students can only view their own performance history"
+                )
+
         else:
             raise StudentTestPermissionError(
                 "You do not have permission to view student history"
@@ -1020,6 +1026,8 @@ class StudentTestController:
                 "percentage": percentage,
 
                 "status": attempt.status,
+                "is_result_show": getattr(series, "is_result_show", True),
+                "is_score_show": getattr(series, "is_score_show", True),
 
                 "started_at": attempt.started_at,
                 "submitted_at": attempt.submitted_at,
@@ -1032,3 +1040,295 @@ class StudentTestController:
             "total_tests": len(history),
             "history": history,
         }
+
+    @staticmethod
+    def get_leaderboard(
+        series_id: int,
+        user_id: int,
+        user_role: int,
+        db: Session,
+    ):
+        series = db.query(TestSeries).filter(TestSeries.id == series_id).first()
+        if not series:
+            raise StudentTestNotFoundError("Test series not found")
+
+        is_staff = user_role in (0, 1, 2)
+        if not is_staff and not getattr(series, "is_result_show", True):
+            return {
+                "series_id": series_id,
+                "series_name": series.name,
+                "is_result_show": False,
+                "message": "Results and leaderboard for this test have not been published yet.",
+                "total_candidates": 0,
+                "my_rank": None,
+                "my_score": None,
+                "my_percentile": None,
+                "top_score": None,
+                "average_score": None,
+                "leaderboard": [],
+            }
+
+        attempts = (
+            db.query(TestAttempt, User)
+            .join(User, TestAttempt.user_id == User.id)
+            .filter(
+                TestAttempt.series_id == series_id,
+                TestAttempt.status.in_([AttemptStatus.SUBMITTED, AttemptStatus.FORCE_SUBMITTED]),
+            )
+            .order_by(TestAttempt.score.desc(), TestAttempt.submitted_at.asc())
+            .all()
+        )
+
+        best_per_user = {}
+        for attempt, student in attempts:
+            uid = attempt.user_id
+            score = float(attempt.score or 0)
+            if uid not in best_per_user:
+                best_per_user[uid] = (attempt, student, score)
+            else:
+                if score > best_per_user[uid][2]:
+                    best_per_user[uid] = (attempt, student, score)
+
+        candidates = list(best_per_user.values())
+        # Sort descending by score, ascending by submission time
+        candidates.sort(
+            key=lambda x: (
+                -x[2],
+                x[0].submitted_at if x[0].submitted_at else (x[0].started_at or datetime.min)
+            )
+        )
+
+        total_candidates = len(candidates)
+        total_marks = float(series.total_marks or 0)
+        if total_marks <= 0 and candidates:
+            total_marks = float(candidates[0][0].total_marks or 0)
+
+        my_rank = None
+        my_score = None
+        my_percentile = None
+
+        ranked_list = []
+        scores_list = []
+
+        for idx, (attempt, student, score) in enumerate(candidates):
+            rank = idx + 1
+            scores_list.append(score)
+            pct = round((score / total_marks * 100), 1) if total_marks > 0 else 0.0
+
+            if student.id == user_id:
+                my_rank = rank
+                my_score = score
+                if total_candidates > 1:
+                    my_percentile = round(((total_candidates - rank) / (total_candidates - 1)) * 100, 1)
+                else:
+                    my_percentile = 100.0
+
+            # Calculate duration in seconds
+            time_taken = None
+            if attempt.submitted_at and attempt.started_at:
+                try:
+                    delta = (attempt.submitted_at - attempt.started_at).total_seconds()
+                    time_taken = max(0, int(delta))
+                except Exception:
+                    time_taken = None
+
+            # Include top 25 plus current user if outside top 25
+            if rank <= 25 or student.id == user_id:
+                ranked_list.append({
+                    "rank": rank,
+                    "student_id": student.id,
+                    "student_name": student.name if (is_staff or student.id == user_id) else (student.name[:15]),
+                    "score": score,
+                    "total_marks": total_marks,
+                    "percentage": pct,
+                    "time_taken_seconds": time_taken,
+                    "is_current_user": student.id == user_id,
+                })
+
+        avg_score = round(sum(scores_list) / len(scores_list), 1) if scores_list else 0.0
+        top_score = max(scores_list) if scores_list else 0.0
+
+        return {
+            "series_id": series_id,
+            "series_name": series.name,
+            "total_marks": total_marks,
+            "is_result_show": True,
+            "total_candidates": total_candidates,
+            "my_rank": my_rank,
+            "my_score": my_score,
+            "my_percentile": my_percentile,
+            "top_score": top_score,
+            "average_score": avg_score,
+            "leaderboard": ranked_list,
+        }
+
+    @staticmethod
+    def get_revision_questions(
+        user_id: int,
+        user_role: int,
+        db: Session,
+        filter_type: str = "mistakes",
+        series_id: int | None = None,
+        limit: int = 100,
+    ):
+        StudentTestController._require_student(user_role)
+
+        attempts_query = (
+            db.query(TestAttempt, TestSeries)
+            .join(TestSeries, TestAttempt.series_id == TestSeries.id)
+            .filter(
+                TestAttempt.user_id == user_id,
+                TestAttempt.status.in_([AttemptStatus.SUBMITTED, AttemptStatus.FORCE_SUBMITTED]),
+            )
+        )
+
+        if user_role == 3:
+            attempts_query = attempts_query.filter(TestSeries.is_result_show.is_(True))
+
+        if series_id:
+            attempts_query = attempts_query.filter(TestAttempt.series_id == series_id)
+
+        user_attempts = attempts_query.all()
+        if not user_attempts:
+            return {
+                "total": 0,
+                "items": [],
+                "available_series": [],
+            }
+
+        attempt_map = {att.id: (att, ser) for att, ser in user_attempts}
+        attempt_ids = list(attempt_map.keys())
+
+        seen_series = {}
+        for att, ser in user_attempts:
+            if ser.id not in seen_series:
+                seen_series[ser.id] = {
+                    "id": ser.id,
+                    "name": ser.name,
+                }
+        available_series = list(seen_series.values())
+
+        q_query = db.query(AttemptQuestion).filter(
+            AttemptQuestion.attempt_id.in_(attempt_ids)
+        )
+
+        if filter_type == "mistakes":
+            q_query = q_query.filter(
+                AttemptQuestion.selected_option_id.isnot(None),
+                AttemptQuestion.correct_option_id.isnot(None),
+                AttemptQuestion.selected_option_id != AttemptQuestion.correct_option_id,
+            )
+        elif filter_type == "unanswered":
+            q_query = q_query.filter(
+                AttemptQuestion.selected_option_id.is_(None)
+            )
+
+        questions = q_query.order_by(
+            AttemptQuestion.attempt_id.desc(),
+            AttemptQuestion.position.asc()
+        ).limit(limit).all()
+
+        if not questions:
+            return {
+                "total": 0,
+                "items": [],
+                "available_series": available_series,
+            }
+
+        original_q_ids = [q.original_question_id for q in questions]
+        question_diagrams_map = {}
+        if original_q_ids:
+            q_diagrams = (
+                db.query(Diagram)
+                .filter(Diagram.type == 0, Diagram.ref_id.in_(original_q_ids))
+                .order_by(Diagram.id.asc())
+                .all()
+            )
+            for d in q_diagrams:
+                if d.ref_id not in question_diagrams_map:
+                    question_diagrams_map[d.ref_id] = []
+                question_diagrams_map[d.ref_id].append({"id": d.id, "path": d.path, "ref_id": d.ref_id, "type": d.type})
+
+        all_opt_ids = []
+        for q in questions:
+            try:
+                opts = json.loads(q.options_snapshot)
+                for opt in opts:
+                    if "id" in opt and opt["id"]:
+                        all_opt_ids.append(opt["id"])
+                        all_opt_ids.append(int(opt["id"]))
+            except Exception:
+                pass
+
+        option_diagrams_map = {}
+        if all_opt_ids:
+            opt_diagrams = (
+                db.query(Diagram)
+                .filter(Diagram.type == 1, Diagram.ref_id.in_(all_opt_ids))
+                .order_by(Diagram.id.desc())
+                .all()
+            )
+            for d in opt_diagrams:
+                option_diagrams_map[d.ref_id] = d.path
+                option_diagrams_map[str(d.ref_id)] = d.path
+                try:
+                    option_diagrams_map[int(d.ref_id)] = d.path
+                except Exception:
+                    pass
+
+        serialized = []
+        for q in questions:
+            att, ser = attempt_map[q.attempt_id]
+            diagrams_list = question_diagrams_map.get(q.original_question_id, [])
+            q_diagram_path = diagrams_list[-1]["path"] if diagrams_list else None
+
+            try:
+                raw_options = json.loads(q.options_snapshot)
+            except Exception:
+                raw_options = []
+
+            options_list = []
+            for opt in raw_options:
+                opt_id = opt.get("id")
+                diag_path = (
+                    opt.get("diagram_path")
+                    or option_diagrams_map.get(opt_id)
+                    or (option_diagrams_map.get(str(opt_id)) if opt_id is not None else None)
+                )
+                options_list.append({
+                    "id": opt_id,
+                    "ans": opt.get("ans", ""),
+                    "diagram_path": diag_path,
+                })
+
+            q_status = "unanswered"
+            if q.selected_option_id is not None:
+                if q.correct_option_id is not None and str(q.selected_option_id) == str(q.correct_option_id):
+                    q_status = "correct"
+                else:
+                    q_status = "incorrect"
+
+            serialized.append({
+                "id": q.id,
+                "attempt_id": att.id,
+                "series_id": ser.id,
+                "series_name": ser.name,
+                "submitted_at": att.submitted_at,
+                "position": q.position,
+                "question_text": q.question_text,
+                "marks": float(q.marks),
+                "marks_awarded": float(q.marks_awarded or 0),
+                "selected_option_id": q.selected_option_id,
+                "correct_option_id": q.correct_option_id,
+                "status": q_status,
+                "diagram_path": q_diagram_path,
+                "diagrams": diagrams_list,
+                "options": options_list,
+            })
+
+        return {
+            "total": len(serialized),
+            "items": serialized,
+            "available_series": available_series,
+        }
+

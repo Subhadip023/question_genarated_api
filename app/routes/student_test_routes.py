@@ -173,3 +173,40 @@ def get_student_history(
             db=db,
         )
     )
+
+
+@router.get("/test-series/{series_id}/leaderboard")
+def get_test_leaderboard(
+    series_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    return _call(
+        lambda: StudentTestController.get_leaderboard(
+            series_id=series_id,
+            user_id=request.state.user_id,
+            user_role=request.state.user_role,
+            db=db,
+        )
+    )
+
+
+@router.get("/revision-questions")
+def get_revision_questions(
+    request: Request,
+    filter_type: str = "mistakes",
+    series_id: int | None = None,
+    limit: int = 100,
+    db: Session = Depends(get_db),
+):
+    return _call(
+        lambda: StudentTestController.get_revision_questions(
+            user_id=request.state.user_id,
+            user_role=request.state.user_role,
+            db=db,
+            filter_type=filter_type,
+            series_id=series_id,
+            limit=limit,
+        )
+    )
+
