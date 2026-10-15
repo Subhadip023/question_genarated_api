@@ -15,6 +15,7 @@ from app.models.user import User
 from app.models.batch import Batch
 from app.models.batch_student import BatchStudent
 from app.models.notification import Notification
+from app.models.password_reset_otp import PasswordResetOTP
 
 __all__ = [
     "Diagram",
@@ -30,5 +31,6 @@ __all__ = [
     "Topic",
     "User",
     "Notification",
+    "PasswordResetOTP",
 ]
 

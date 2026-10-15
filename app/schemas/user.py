@@ -90,3 +90,25 @@ class TokenResponse(BaseModel):
     organization_name: str | None
     user_role: int
     user: UserResponse
+
+
+class ForgotPasswordSendOtpRequest(BaseModel):
+    """Payload to request an OTP code for password reset."""
+
+    email: str = Field(..., min_length=3, max_length=255)
+
+
+class ForgotPasswordResetRequest(BaseModel):
+    """Payload to verify OTP and set a new password."""
+
+    email: str = Field(..., min_length=3, max_length=255)
+    otp: str = Field(..., min_length=4, max_length=10)
+    new_password: str = Field(..., min_length=8, max_length=255)
+    confirm_new_password: str = Field(..., min_length=8, max_length=255)
+
+
+class ForgotPasswordResponse(BaseModel):
+    """Response returned upon successful OTP request or password reset."""
+
+    message: str
+

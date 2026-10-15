@@ -1,4 +1,4 @@
-﻿"""Bearer-token authentication middleware.
+"""Bearer-token authentication middleware.
 
 Hot path: user_id and role are read directly from the signed JWT claims -
 zero database queries on every request.
@@ -68,6 +68,8 @@ class AuthMiddleware(BaseHTTPMiddleware):
         "/health",
         "/auth/login",
         "/auth/register",
+        "/auth/forgot-password/send-otp",
+        "/auth/forgot-password/reset",
         "/openapi.json",
         "/student/test-series/invite-info",
     }
