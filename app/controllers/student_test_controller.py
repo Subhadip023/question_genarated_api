@@ -1060,7 +1060,14 @@ class StudentTestController:
         user_role: int,
         db: Session,
     ):
-        series = db.query(TestSeries).filter(TestSeries.id == series_id).first()
+        series = (
+            db.query(TestSeries)
+            .options(
+                joinedload(TestSeries.series_questions).joinedload(SeriesQuestion.question)
+            )
+            .filter(TestSeries.id == series_id)
+            .first()
+        )
         if not series:
             raise StudentTestNotFoundError("Test series not found")
 
@@ -1111,7 +1118,12 @@ class StudentTestController:
         )
 
         total_candidates = len(candidates)
-        total_marks = float(series.total_marks or 0)
+        total_marks = 0.0
+        if series.series_questions:
+            total_marks = sum(
+                float(sq.marks if sq.marks is not None else (sq.question.marks if sq.question and sq.question.marks is not None else 1.0))
+                for sq in series.series_questions
+            )
         if total_marks <= 0 and candidates:
             total_marks = float(candidates[0][0].total_marks or 0)
 
